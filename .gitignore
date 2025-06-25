@@ -1,0 +1,88 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+venv/
+/venv
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+.next/
+
+# production
+/build
+/dist
+/dist-electron
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (can opt-in for committing if needed)
+.env*
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+*venv
+*.env
+/.env
+# AI 모델 및 데이터셋
+/models/
+*models
+/dataset/
+dataset/
+
+# 맞춤법 사전 및 단어 데이터
+/words/
+words/
+/spellcheck_dictionary.json
+*spellcheck_dictionary.json
+/NIADic.xlsx
+/nia_dictionary.json
+# 🔥 기가차드 Hot Reload 지옥 방지
+# Electron build files
+dist/
+.electron/
+.vscode/settings.json
+
+# SQLite
+*.db
+*.sqlite
+*.sqlite3
+
+# Prisma
+prisma/dev.db
+
+# 임시 파일
+*.tmp
+*.temp
+.temp/
+.tmp/
+
+# 로그 파일  
+*.log
+logs/
+
+# OS generated files
+Thumbs.db

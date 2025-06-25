@@ -1,0 +1,31 @@
+graph TD
+    subgraph "Loop AI 문서 구조"
+        Core["핵심 문서"]
+        API["API 문서"]
+        Arch["아키텍처 문서"]
+        Research["연구 문서"]
+        Deploy["배포 문서"]
+        
+        Core --> WebSearch["웹 검색 및 MCP 통합"]
+        Core --> MCPSetup["MCP 서버 설정 가이드"]
+        Core --> ChatUI["채팅 UI 가이드"]
+        Core --> CostOpt["OpenAI 비용 최적화 가이드"]
+        
+        API --> APIOverview["API 개요"]
+        API --> WebSearchAPI["웹 검색 API"]
+        API --> StoryAPI["스토리 생성기 API"]
+        API --> NameAPI["판타지 이름 생성기 API"]
+        API --> Examples["API 예제"]
+        API --> Troubleshooting["문제 해결 가이드"]
+        
+        Arch --> MCPIntegration["MCP 통합 아키텍처"]
+        Arch --> LLMOps["LLMOPS 아키텍처"]
+        
+        Research --> KoreanAI["한국어 특화 AI 분석"]
+        Research --> Forgetting["재앙적 망각 분석"]
+        Research --> Solutions["현실적 솔루션 가이드"]
+        Research --> ResearchTrouble["문제 해결 가이드"]
+        
+        classDef new fill:#f9f,stroke:#333,stroke-width:2px;
+        class WebSearch,MCPSetup,WebSearchAPI,MCPIntegration new;
+    end 

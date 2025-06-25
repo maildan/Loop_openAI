@@ -1,0 +1,94 @@
+# 🔥 기가차드 MPS 최적화 VL 트레이너 의존성
+# Apple M4 Silicon 완전 지원
+
+# 🚀 Core ML Framework
+torch>=2.1.0
+transformers>=4.35.0
+tokenizers>=0.15.0
+
+# 🎯 Fine-tuning & PEFT
+peft>=0.6.0
+accelerate>=0.24.0
+datasets>=2.14.0
+
+# 📊 Data Processing
+numpy>=1.24.0
+pandas>=2.0.0
+
+# 🔧 Utilities
+tqdm>=4.65.0
+safetensors>=0.4.0
+
+# 📈 Monitoring
+psutil>=5.9.0
+
+# 🛠️ Development
+jupyter>=1.0.0
+
+# 🌐 External HTTP
+requests>=2.28.0
+
+# 🚀 Redis & Async
+aioredis>=2.0.0
+asyncio-mqtt>=0.11.0
+
+# 기본 서버 의존성
+fastapi==0.104.1
+uvicorn>=0.24.0
+pydantic==2.4.2
+pydantic-core==2.10.1
+
+# Google API 의존성
+google-auth-oauthlib>=1.0.0
+google-auth>=2.22.0
+google-api-python-client>=2.95.0
+
+# AI 및 머신러닝
+openai>=1.0.0
+transformers>=4.35.0
+torch>=2.0.0
+tokenizers>=0.15.0
+
+# 데이터 처리
+pandas>=2.0.0
+numpy>=1.24.0
+requests>=2.31.0
+
+# 맞춤법 검사
+fuzzywuzzy>=0.18.0
+python-Levenshtein>=0.20.0
+
+# 캐싱 및 데이터베이스
+redis>=4.0.0
+
+# 유틸리티
+python-dotenv>=1.0.0
+tqdm>=4.65.0
+Pillow>=10.0.0
+
+# 비동기 처리
+asyncio-mqtt>=0.11.0
+aiofiles>=23.0.0
+
+# 웹 및 API
+httpx>=0.25.0
+aiohttp>=3.8.0
+
+# 개발 및 테스트
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+
+# 타입 힌트 및 코드 품질
+mypy>=1.5.0
+black>=23.0.0
+flake8>=6.0.0
+
+# MCP 관련 의존성
+mcp-python>=0.1.0
+mcp-client>=0.1.0
+
+# 추가 유틸리티
+nltk>=3.8.1
+numpy>=1.24.3
+pandas>=2.0.3
+matplotlib>=3.7.2 

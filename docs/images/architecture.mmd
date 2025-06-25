@@ -1,0 +1,31 @@
+graph TD
+    subgraph "Loop AI 아키텍처"
+        Frontend["Frontend<br/>(Next.js)"]
+        API["Loop AI API<br/>(FastAPI)"]
+        MCP["MCP 서버<br/>(FastMCP)"]
+        WebSearch["웹 검색 핸들러"]
+        LocationHandler["위치 정보 핸들러"]
+        ChatHandler["채팅 핸들러"]
+        Redis["Redis 캐시"]
+        ExaSearch["Exa Search API"]
+        AIModel["AI 모델<br/>(Claude/GPT)"]
+        
+        Frontend -->|HTTP 요청| API
+        API -->|응답| Frontend
+        
+        API -->|웹 검색 요청| WebSearch
+        API -->|위치 정보 요청| LocationHandler
+        API -->|채팅 요청| ChatHandler
+        
+        WebSearch -->|캐싱| Redis
+        Redis -->|캐시 조회| WebSearch
+        
+        WebSearch -->|검색 요청| ExaSearch
+        ExaSearch -->|검색 결과| WebSearch
+        
+        MCP -->|도구 호출| WebSearch
+        MCP -->|도구 호출| LocationHandler
+        
+        AIModel -->|MCP 프로토콜| MCP
+        API -->|HTTP| MCP
+    end 
