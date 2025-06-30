@@ -117,13 +117,13 @@ const FantasyNameGenerator: React.FC<FantasyNameGeneratorProps> = ({ className }
           </div>
           
           <Button
-            variant="primary"
-            size="md"
-            loading={loading}
-            leftIcon={<RefreshCw className="w-4 h-4" />}
+            variant="default"
+            size="default"
+            disabled={loading}
             onClick={generateNames}
-            fullWidth
+            className="w-full"
           >
+            {loading && <RefreshCw className="w-4 h-4 mr-2 animate-spin" />}
             이름 생성하기
           </Button>
         </div>
@@ -142,9 +142,9 @@ const FantasyNameGenerator: React.FC<FantasyNameGeneratorProps> = ({ className }
                   <span className="font-medium">{name}</span>
                   <Button
                     variant="ghost"
-                    size="xs"
+                    size="sm"
                     onClick={() => copyToClipboard(name)}
-                    rounded="full"
+                    className="rounded-full"
                   >
                     {copied === name ? (
                       <CheckCircle className="w-4 h-4 text-green-500" />

@@ -33,10 +33,9 @@ aioredis>=2.0.0
 asyncio-mqtt>=0.11.0
 
 # 기본 서버 의존성
-fastapi==0.104.1
+fastapi
 uvicorn>=0.24.0
-pydantic==2.4.2
-pydantic-core==2.10.1
+pydantic>=2.7.0
 
 # Google API 의존성
 google-auth-oauthlib>=1.0.0
@@ -44,7 +43,7 @@ google-auth>=2.22.0
 google-api-python-client>=2.95.0
 
 # AI 및 머신러닝
-openai>=1.0.0
+openai
 transformers>=4.35.0
 torch>=2.0.0
 tokenizers>=0.15.0
@@ -55,8 +54,8 @@ numpy>=1.24.0
 requests>=2.31.0
 
 # 맞춤법 검사
-fuzzywuzzy>=0.18.0
-python-Levenshtein>=0.20.0
+# py-hanspell>=1.1
+beautifulsoup4>=4.9.3
 
 # 캐싱 및 데이터베이스
 redis>=4.0.0
@@ -84,8 +83,7 @@ black>=23.0.0
 flake8>=6.0.0
 
 # MCP 관련 의존성
-mcp-python>=0.1.0
-mcp-client>=0.1.0
+mcp[cli]
 
 # 추가 유틸리티
 nltk>=3.8.1

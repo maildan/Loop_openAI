@@ -592,7 +592,7 @@ class LocationAutocomplete {
         this.cache.set(query, suggestions);
         callback(suggestions);
 
-      } catch (error) {
+    } catch (error) {
         console.error('위치 검색 실패:', error);
         callback([]);
       }

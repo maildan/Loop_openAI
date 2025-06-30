@@ -1,8 +1,7 @@
-import type { NextConfig } from "next";
-
-const nextConfig: NextConfig = {
+/** @type {import('next').NextConfig} */
+const nextConfig = {
   /* config options here */
-  
+
   // 🔥 기가차드 Hot Reload 지옥 방지!
   webpack: (config, { dev }) => {
     if (dev) {
@@ -16,7 +15,7 @@ const nextConfig: NextConfig = {
     }
     return config;
   },
-  
+
   rewrites: async () => {
     return [
       {
@@ -41,4 +40,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+module.exports = nextConfig; 

@@ -6,6 +6,7 @@ import requests
 
 logger = logging.getLogger(__name__)
 
+
 class LocationHandler:
     """Neutrino API를 이용한 지역·도시명 추천 핸들러"""
 
@@ -17,7 +18,9 @@ class LocationHandler:
         self.api_key = os.getenv("KEY") or os.getenv("NEUTRINO_API_KEY")
 
         if not self.user_id or not self.api_key:
-            logger.warning("⚠️ Neutrino API 자격증명이 설정되지 않았습니다. LocationHandler 비활성화!")
+            logger.warning(
+                "⚠️ Neutrino API 자격증명이 설정되지 않았습니다. LocationHandler 비활성화!"
+            )
             self.enabled = False
         else:
             self.enabled = True
@@ -68,4 +71,4 @@ class LocationHandler:
 
         except Exception as e:
             logger.error(f"❌ Neutrino 위치 추천 오류: {e}")
-            return [] 
+            return []

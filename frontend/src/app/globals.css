@@ -1,4 +1,6 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 /* ChatGPT + Claude 스타일 통합 UI - 최적화된 다크 테마 */
 

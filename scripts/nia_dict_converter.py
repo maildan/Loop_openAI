@@ -7,12 +7,12 @@ NIADic.xlsx를 JSON 형태로 변환하고 맞춤법 검사용 최적화된 사�
 import json
 import os
 import re
-from typing import Dict, List, Set, Any, Optional
+from typing import Any
 
 import pandas as pd
 from pandas import DataFrame, Series
 
-def load_nia_dictionary(file_path: str) -> Optional[DataFrame]:
+def load_nia_dictionary(file_path: str) -> DataFrame | None:
     """NIA 사전 Excel 파일 로딩"""
     try:
         print(f"📖 NIA 사전 로딩 중: {file_path}")
@@ -29,7 +29,7 @@ def load_nia_dictionary(file_path: str) -> Optional[DataFrame]:
         print(f"❌ 파일 로딩 실패: {e}")
         return None
 
-def clean_word(word: Any) -> Optional[str]:
+def clean_word(word: str | int | float | None) -> str | None:
     """단어 정리 및 검증"""
     if pd.isna(word):
         return None
@@ -49,7 +49,7 @@ def clean_word(word: Any) -> Optional[str]:
     
     return cleaned
 
-def process_nia_data(df: DataFrame) -> Dict[str, Any]:
+def process_nia_data(df: DataFrame) -> dict[str, Any]:
     """NIA 데이터 처리 및 분석"""
     print("🔍 데이터 분석 중...")
     
@@ -58,19 +58,20 @@ def process_nia_data(df: DataFrame) -> Dict[str, Any]:
     for col in df.columns:
         col_lower = str(col).lower()
         if any(keyword in col_lower for keyword in ['어휘', '단어', 'word', '표제어', '어근']):
-            word_columns.append(col)
+            word_columns.append(str(col))
     
     print(f"📝 식별된 단어 컬럼: {word_columns}")
     
     # 모든 단어 수집
-    all_words: Set[str] = set()
-    word_stats: Dict[str, int] = {}
+    all_words: set[str] = set()
+    word_stats: dict[str, int] = {}
     
     for col in word_columns:
         if col in df.columns:
             print(f"📊 {col} 컬럼 처리 중...")
             
             # 각 컬럼의 고유값 개수
+            unique_count = 0
             try:
                 unique_count = int(df[col].nunique())
                 word_stats[col] = unique_count
@@ -80,8 +81,8 @@ def process_nia_data(df: DataFrame) -> Dict[str, Any]:
             
             # 단어 정리 및 추가
             series_data = df[col].dropna()
-            for word in series_data:
-                cleaned = clean_word(word)
+            for item in series_data:
+                cleaned = clean_word(item)
                 if cleaned:
                     all_words.add(cleaned)
     
@@ -96,12 +97,12 @@ def process_nia_data(df: DataFrame) -> Dict[str, Any]:
         }
     }
 
-def create_optimized_spellcheck_dict(words: List[str], max_words: int = 50000) -> Dict[str, Any]:
+def create_optimized_spellcheck_dict(words: list[str], max_words: int = 50000) -> dict[str, Any]:
     """맞춤법 검사용 최적화된 사전 생성"""
     print(f"⚡ 맞춤법 검사용 사전 최적화 중... (최대 {max_words:,}개)")
     
     # 단어 길이와 사용 빈도를 고려한 점수 계산
-    word_scores = []
+    word_scores: list[tuple[str, int]] = []
     
     for word in words:
         score = 0
@@ -127,7 +128,7 @@ def create_optimized_spellcheck_dict(words: List[str], max_words: int = 50000) -
     word_scores.sort(key=lambda x: x[1], reverse=True)
     
     # 상위 단어 선택
-    selected_words = [word for word, score in word_scores[:max_words]]
+    selected_words = [word for word, _ in word_scores[:max_words]]
     
     print(f"✅ 최적화 완료: {len(selected_words):,}개 단어 선택")
     
@@ -141,7 +142,7 @@ def create_optimized_spellcheck_dict(words: List[str], max_words: int = 50000) -
         }
     }
 
-def save_dictionaries(data: Dict[str, Any], output_dir: str = "dataset/words"):
+def save_dictionaries(data: dict[str, Any], output_dir: str = "dataset/words"):
     """사전 파일들 저장"""
     os.makedirs(output_dir, exist_ok=True)
     

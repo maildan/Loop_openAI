@@ -1,16 +1,12 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Inter } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
 });
 
@@ -19,7 +15,13 @@ export const metadata: Metadata = {
   description: "기가차드 파워로 한국어 소설을 자동 생성하는 AI 어시스턴트. 판타지, 로맨스, SF, 미스터리, 드라마 등 다양한 장르의 창작을 지원합니다.",
   keywords: ["AI", "소설", "창작", "한국어", "VL Novel", "자동생성", "기가차드"],
   authors: [{ name: "VL Novel AI Team" }],
-  viewport: "width=device-width, initial-scale=1",
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 };
 
 export default function RootLayout({
@@ -30,12 +32,14 @@ export default function RootLayout({
   return (
     <html lang="ko" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-white dark:bg-gray-900 text-gray-900 dark:text-white transition-colors duration-300`}
+        className={`${inter.variable} antialiased bg-white dark:bg-gray-900 text-gray-900 dark:text-white transition-colors duration-300`}
       >
         <ErrorBoundary>
-          <ThemeProvider>
+        <ThemeProvider>
+          <TooltipProvider>
             {children}
-          </ThemeProvider>
+          </TooltipProvider>
+        </ThemeProvider>
         </ErrorBoundary>
       </body>
     </html>

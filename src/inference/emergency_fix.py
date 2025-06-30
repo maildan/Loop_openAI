@@ -10,9 +10,10 @@
 import json
 from typing import Dict, Any
 
+
 class SuperEmergencyLoopAI:
     """🔥 슈퍼 응급처치된 Loop AI"""
-    
+
     def __init__(self):
         self.korean_examples = {
             "fantasy": """**제목: 잃어버린 마법의 서**
@@ -30,7 +31,6 @@ class SuperEmergencyLoopAI:
 다음 날, 엘라라는 다친 새를 치유했다. 교수들이 놀란 눈으로 바라보았다.
 
 "이제 진짜 마법사가 되었구나." 그녀가 혼잣말했다.""",
-            
             "movie": """**제목: 최후의 추격**
 
 현우는 전직 특수요원이었다. 지금은 평범한 택시기사로 살고 있었다.
@@ -50,7 +50,6 @@ class SuperEmergencyLoopAI:
 "그냥 택시기사입니다." 현우가 핸들을 꺾으며 답했다.
 
 하지만 그의 눈빛은 이미 전사의 것이었다.""",
-            
             "anime": """**제목: 시공간 카페**
 
 유키는 평범한 고등학생이었다. 그날도 학교에서 집으로 가는 길이었다.
@@ -70,7 +69,6 @@ class SuperEmergencyLoopAI:
 "미나야, 고마웠어. 정말 좋은 친구였어."
 
 미나가 눈물을 글썽이며 웃었다.""",
-            
             "drama": """**제목: 작은 책방의 기적**
 
 지은은 28살이었다. 대기업을 그만두고 작은 책방을 열었다.
@@ -91,14 +89,14 @@ class SuperEmergencyLoopAI:
 
 할머니가 시를 읽기 시작했다. 지은도 함께 들었다.
 
-작은 책방에 따뜻한 기적이 시작되었다."""
+작은 책방에 따뜻한 기적이 시작되었다.""",
         }
-    
+
     def create_super_prompt(self, user_request: str, genre: str = "fantasy") -> str:
         """🔥 슈퍼 강화된 한국어 프롬프트"""
-        
+
         example = self.korean_examples.get(genre, self.korean_examples["fantasy"])
-        
+
         # 한국어 강제 고정 프롬프트
         super_prompt = f"""당신은 한국어 창작 전문가 Loop AI입니다. 반드시 한국어로만 응답하세요.
 
@@ -117,7 +115,7 @@ class SuperEmergencyLoopAI:
 Loop AI (한국어 창작 시작):"""
 
         return super_prompt
-    
+
     def get_korean_params(self) -> Dict[str, Any]:
         """🔥 한국어 최적화 파라미터"""
         return {
@@ -129,54 +127,65 @@ Loop AI (한국어 창작 시작):"""
             "no_repeat_ngram_size": 4,  # 4-gram 반복 방지
             "do_sample": True,
             "pad_token_id": 151643,  # Qwen EOS 토큰
-            "eos_token_id": 151643
+            "eos_token_id": 151643,
         }
-    
+
     def detect_genre_korean(self, prompt: str) -> str:
         """🎯 한국어 장르 감지"""
         prompt_lower = prompt.lower()
-        
-        if any(word in prompt_lower for word in ["판타지", "마법", "용", "엘프", "마법사", "모험"]):
+
+        if any(
+            word in prompt_lower
+            for word in ["판타지", "마법", "용", "엘프", "마법사", "모험"]
+        ):
             return "fantasy"
-        elif any(word in prompt_lower for word in ["영화", "시나리오", "액션", "스릴러", "추격"]):
+        elif any(
+            word in prompt_lower
+            for word in ["영화", "시나리오", "액션", "스릴러", "추격"]
+        ):
             return "movie"
-        elif any(word in prompt_lower for word in ["애니", "애니메이션", "캐릭터", "학생"]):
+        elif any(
+            word in prompt_lower for word in ["애니", "애니메이션", "캐릭터", "학생"]
+        ):
             return "anime"
         elif any(word in prompt_lower for word in ["드라마", "대본", "연속극", "가족"]):
             return "drama"
         else:
             return "fantasy"
 
+
 # 전역 슈퍼 인스턴스
 super_emergency_ai = SuperEmergencyLoopAI()
 
+
 def fix_catastrophic_forgetting(prompt: str) -> Dict[str, Any]:
     """🚨 Catastrophic Forgetting 완전 해결"""
-    
+
     # 한국어 장르 감지
     genre = super_emergency_ai.detect_genre_korean(prompt)
-    
+
     # 슈퍼 한국어 프롬프트 생성
     super_prompt = super_emergency_ai.create_super_prompt(prompt, genre)
-    
+
     # 한국어 최적화 파라미터
     params = super_emergency_ai.get_korean_params()
-    
+
     return {
         "enhanced_prompt": super_prompt,
         "params": params,
         "genre": genre,
         "fix_applied": True,
-        "korean_forced": True
+        "korean_forced": True,
     }
+
 
 if __name__ == "__main__":
     # 테스트
     test_prompt = "판타지 소설을 써주세요. 마법사가 등장하는 이야기로요."
     result = fix_catastrophic_forgetting(test_prompt)
-    
+
     print("🚨 슈퍼 응급처치 결과:")
     print(f"장르: {result['genre']}")
     print(f"한국어 강제: {result['korean_forced']}")
     print(f"슈퍼 프롬프트:\n{result['enhanced_prompt']}")
-    print(f"파라미터: {result['params']}") 
+    print(f"파라미터: {result['params']}")

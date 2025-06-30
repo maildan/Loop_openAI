@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-// Next.js API Route 응답 크기 제한 해제 (긴 소설 생성을 위해)
-export const config = {
-  api: {
-    responseLimit: '10mb', // 10MB로 제한 증가
-  },
-}
+// Next.js API Route 응답 크기 제한 해제 (긴 소설 생성을 위해) -> App Router에서는 사용되지 않음
+// export const config = {
+//   api: {
+//     responseLimit: '10mb', // 10MB로 제한 증가
+//   },
+// }
 
 interface Message {
   role: 'user' | 'assistant'
@@ -30,6 +30,8 @@ interface ChatResponse {
   continuationToken?: string // 계속하기를 위한 토큰
 }
 
+const backendUrl = process.env.BACKEND_URL || 'http://localhost:8001'
+
 export async function POST(request: NextRequest) {
   try {
     // 요청 데이터 안전하게 파싱
@@ -47,9 +49,6 @@ export async function POST(request: NextRequest) {
       historyLength: requestData.history?.length || 0
     })
 
-    // 백엔드 서버 연결 체크 - 실제 실행 포트로 수정
-    const backendUrl = process.env.BACKEND_URL || 'http://localhost:8080'
-    
     // 연결 타임아웃 설정
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 30000) // 30초 타임아웃
