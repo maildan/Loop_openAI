@@ -3,6 +3,12 @@
 import { useState, useCallback } from 'react'
 import { baseUrl } from '@/lib/utils'
 
+// 요청/응답 타입을 채팅에 맞게 수정
+interface ChatRequest {
+  message: string;
+  history: { role: string; content: string }[];
+}
+
 interface StoryRequest {
   prompt: string
   genre?: string
@@ -34,16 +40,19 @@ interface Genre {
 export const useStoryGeneration = () => {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [story, setStory] = useState<StoryResponse | null>(null)
+  // story 상태를 단일 객체가 아닌, 생성되는 텍스트를 저장하는 문자열로 변경
+  const [story, setStory] = useState<string>('')
 
-  const generateStory = useCallback(async (request: StoryRequest) => {
+  const generateStory = useCallback(async (request: ChatRequest) => {
     setIsLoading(true)
     setError(null)
+    setStory('') // 생성 시작 시 초기화
     
     try {
-      console.log('🚀 기가차드 API 호출:', request)
+      console.log('🚀 기가차드 스트리밍 API 호출:', request)
       
-      const response = await fetch(`${baseUrl}/api/generate`, {
+      // 엔드포인트를 /api/chat으로 변경
+      const response = await fetch(`${baseUrl}/api/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -52,35 +61,35 @@ export const useStoryGeneration = () => {
       })
 
       console.log('📡 응답 상태:', response.status, response.statusText)
-      
-      // 응답이 OK가 아니면 텍스트로 읽어서 디버깅
+
       if (!response.ok) {
         const errorText = await response.text()
         console.error('❌ 에러 응답:', errorText)
         throw new Error(`서버 에러 (${response.status}): ${errorText}`)
       }
 
-      // 응답 텍스트를 먼저 확인
-      const responseText = await response.text()
-      console.log('📄 응답 텍스트:', responseText)
-      
-      // JSON 파싱 시도
-      let data: StoryResponse
-      try {
-        data = JSON.parse(responseText)
-      } catch (parseError) {
-        console.error('💥 JSON 파싱 실패:', parseError)
-        throw new Error(`JSON 파싱 실패: ${responseText.substring(0, 100)}...`)
+      if (!response.body) {
+        throw new Error('응답에 body가 없습니다.')
+      }
+
+      // 스트리밍 응답 처리 로직
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let done = false
+
+      while (!done) {
+        const { value, done: readerDone } = await reader.read()
+        done = readerDone
+        const chunk = decoder.decode(value, { stream: true })
+        
+        // 스트리밍으로 받은 텍스트를 실시간으로 상태에 추가
+        setStory((prevStory) => prevStory + chunk)
       }
       
-      console.log('✅ 파싱 성공:', data)
-      setStory(data)
-      return data
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.'
-      console.error('🔥 기가차드 에러:', err)
+      console.error('🔥 기가차드 스트리밍 에러:', err)
       setError(errorMessage)
-      throw err
     } finally {
       setIsLoading(false)
     }
@@ -91,7 +100,9 @@ export const useStoryGeneration = () => {
     isLoading,
     error,
     story,
-    setError
+    setError,
+    // 외부에서 story를 직접 설정할 수 있는 함수 추가 (필요시)
+    setStory, 
   }
 }
 

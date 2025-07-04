@@ -4,9 +4,11 @@ Loop AI 맞춤법 검사 핸들러
 """
 
 import logging
-from typing import TypedDict, Any
+from typing import TypedDict
 import sys
 import os
+from openai import AsyncOpenAI
+import json
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "../../.."))
 
@@ -19,6 +21,7 @@ from src.utils.spellcheck import (
     FullCheckResult,
     ModuleStats,
 )
+from src.utils.style_analyzer import StyleAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -59,17 +62,23 @@ class SpellcheckApiResponse(TypedDict, total=False):
     dictionary_info: DictionaryInfo
     recommendations: list[Recommendation]
     error: str
+    reason: str
+    context_analysis: str
 
 
 class SpellCheckHandler:
-    """맞춤법 검사 핸들러"""
+    """맞춤법 검사 및 문체 제안 핸들러"""
 
     spellchecker: KoreanSpellChecker
+    style_analyzer: StyleAnalyzer
+    openai_client: AsyncOpenAI | None
 
-    def __init__(self):
+    def __init__(self, openai_client: AsyncOpenAI | None = None):
         """맞춤법 검사 핸들러 초기화"""
         self.spellchecker = get_spellchecker()
-        logger.info("✅ 맞춤법 검사 핸들러 초기화 완료")
+        self.style_analyzer = StyleAnalyzer()
+        self.openai_client = openai_client
+        logger.info("✅ 맞춤법 검사 및 문체 분석 핸들러 초기화 완료")
 
     def check_text(self, text: str) -> HandlerCheckResult:
         """
@@ -260,4 +269,99 @@ class SpellCheckHandler:
                 "success": False,
                 "error": str(e),
                 "original_text": text,
+            }
+
+    async def context_aware_correction(
+        self, target_text: str, full_document: str
+    ) -> SpellcheckApiResponse:
+        """
+        AI를 사용하여 문맥을 고려한 맞춤법 및 문체 교정을 수행합니다.
+
+        Args:
+            target_text: 교정할 대상 텍스트
+            full_document: 전체 문서 (문맥 파악용)
+
+        Returns:
+            SpellcheckApiResponse: AI 교정 결과가 포함된 API 응답
+        """
+        if not self.openai_client:
+            logger.warning(
+                "⚠️ OpenAI 클라이언트가 설정되지 않아 AI 기반 교정을 건너뜁니다."
+            )
+            return {
+                "success": False,
+                "error": "OpenAI client not configured",
+                "original_text": target_text,
+                "corrected_text": target_text,
+                "errors_found": -1,
+                "error_words": [],
+                "accuracy": 100.0,
+                "total_words": len(target_text.split()),
+            }
+
+        try:
+            # 더 정교한 프롬프트
+            prompt = f"""당신은 한국어 글쓰기 전문가입니다. 다음은 사용자가 작성한 전체 문서의 일부입니다.
+전체 문맥을 파악하여, 사용자가 교정을 요청한 특정 부분의 맞춤법과 문체를 자연스럽게 수정해주세요.
+
+[전체 문서]
+{full_document}
+
+[교정 대상 문장]
+{target_text}
+
+수정된 문장과 그 이유를 JSON 형식으로 응답해주세요.
+형식: {{"corrected_text": "수정된 문장", "reason": "수정 이유", "context_analysis": "문맥 분석 결과"}}
+"""
+            response = await self.openai_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3,
+                response_format={"type": "json_object"},
+            )
+
+            if response.choices[0].message.content:
+                ai_result = json.loads(response.choices[0].message.content)
+
+                # 로컬 맞춤법 검사기 통계와 결합
+                local_check = self.check_text(ai_result.get("corrected_text", target_text))
+
+                final_result: SpellcheckApiResponse = {
+                    "success": True,
+                    "original_text": target_text,
+                    "corrected_text": ai_result.get("corrected_text", target_text),
+                    "reason": ai_result.get("reason", "AI가 제공한 이유 없음"),
+                    "context_analysis": ai_result.get("context_analysis", "AI가 제공한 분석 없음"),
+                    "errors_found": len(local_check["errors"]),
+                    "error_words": local_check["errors"],
+                    "accuracy": local_check["stats"]["accuracy"],
+                    "total_words": local_check["stats"]["total_words"],
+                }
+                return final_result
+
+            raise ValueError("AI 응답이 비어있습니다.")
+
+        except json.JSONDecodeError as e:
+            logger.error(f"❌ AI 응답 JSON 파싱 오류: {e}")
+            return {
+                "success": False,
+                "error": "AI response is not valid JSON",
+                "original_text": target_text,
+                "corrected_text": target_text,
+                "errors_found": -1,
+                "error_words": [],
+                "accuracy": 100.0,
+                "total_words": len(target_text.split()),
+            }
+        except Exception as e:
+            logger.error(f"❌ AI 기반 문맥 교정 중 오류: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "original_text": target_text,
+                "corrected_text": target_text,
+                "errors_found": -1,
+                "error_words": [],
+                "accuracy": 100.0,
+                "total_words": len(target_text.split()),
             }

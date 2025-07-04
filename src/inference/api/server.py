@@ -7,16 +7,24 @@ Loop AI 모듈화된 추론 서버
 import logging
 import os
 import sys
+import time
 from collections import OrderedDict
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from datetime import datetime
-from typing import Generic, TypeVar, cast, TypedDict, Any
+from datetime import datetime, timezone
+from typing import Generic, TypeVar, TypedDict, Any, TYPE_CHECKING
 
 import uvicorn
+import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from openai import AsyncOpenAI
+from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import StreamingResponse
+from openai import AsyncOpenAI, APIConnectionError
 from pydantic import BaseModel, Field
+
+if TYPE_CHECKING:
+    from mcp.server.fastmcp import FastMCP
 
 # MCP 관련 임포트 추가
 mcp_available = False
@@ -28,7 +36,7 @@ try:
     logger = logging.getLogger(__name__)
     logger.info("✅ MCP 라이브러리 임포트 성공")
 except ImportError:
-    FastMCP = None  # type: ignore
+    FastMCP = None
     logger = logging.getLogger(__name__)
     logger.warning("⚠️ MCP 라이브러리 임포트 실패: MCP 비활성화")
 
@@ -38,28 +46,13 @@ sys.path.append(
 )
 
 # 로컬 모듈 import
-try:
-    from src.inference.api.handlers import ChatHandler, SpellCheckHandler
-    from src.inference.api.handlers.chat_handler import ChatHistoryItem
-    from src.inference.api.handlers.google_docs_handler import GoogleDocsHandler
-    from src.inference.api.handlers.location_handler import LocationHandler
-    from src.inference.api.handlers.web_search_handler import (
-        SearchResult,
-        WebSearchHandler,
-    )
-    from src.utils.spellcheck import ModuleStats
-except ImportError:
-    # 상대 import 실패 시 절대 import 시도
-    sys.path.append(os.path.join(os.path.dirname(__file__), "../../.."))
-    from src.inference.api.handlers import ChatHandler, SpellCheckHandler
-    from src.inference.api.handlers.chat_handler import ChatHistoryItem
-    from src.inference.api.handlers.google_docs_handler import GoogleDocsHandler
-    from src.inference.api.handlers.location_handler import LocationHandler
-    from src.inference.api.handlers.web_search_handler import (
-        SearchResult,
-        WebSearchHandler,
-    )
-    from src.utils.spellcheck import ModuleStats
+from src.inference.api.handlers import ChatHandler, SpellCheckHandler
+from src.inference.api.handlers.google_docs_handler import GoogleDocsHandler
+from src.inference.api.handlers.location_handler import LocationHandler
+from src.inference.api.handlers.web_search_handler import WebSearchHandler
+from src.utils.spellcheck import ModuleStats
+from src.shared.prompts import loader as prompt_loader
+
 
 # 로깅 설정
 logging.basicConfig(
@@ -127,7 +120,7 @@ mcp_server: Any = None
 
 
 @asynccontextmanager
-async def lifespan(_app: "FastAPI"):
+async def lifespan(_app: "FastAPI") -> AsyncGenerator[None, None]:
     """서버 시작 및 종료 시 실행되는 이벤트 핸들러"""
     global openai_client, chat_handler, spellcheck_handler, location_handler, web_search_handler, google_docs_handler, mcp_server
     logger.info("🚀 서버 시작 이벤트 발생")
@@ -136,12 +129,14 @@ async def lifespan(_app: "FastAPI"):
     if not api_key:
         logger.warning("⚠️ OPENAI_API_KEY가 설정되지 않아 외부 API 연동 기능이 제한됩니다.")
 
-    openai_client = AsyncOpenAI(api_key=api_key)
-    logger.info("✅ (Async) OpenAI 클라이언트 초기화 완료")
+    # 더 견고한 HTTP 클라이언트를 위한 타임아웃 설정
+    timeout = httpx.Timeout(10.0, connect=5.0)
+    openai_client = AsyncOpenAI(api_key=api_key, timeout=timeout)
+    logger.info("✅ (Async) OpenAI 클라이언트 초기화 완료 (타임아웃 설정 적용)")
 
     # 핸들러 초기화
     chat_handler = ChatHandler(openai_client)
-    spellcheck_handler = SpellCheckHandler()
+    spellcheck_handler = SpellCheckHandler(openai_client)
     location_handler = LocationHandler()
     web_search_handler = WebSearchHandler(openai_client)
     google_docs_handler = GoogleDocsHandler()
@@ -173,11 +168,15 @@ app = FastAPI(
 # CORS 설정
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:4000"],  # 프론트엔드 주소
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Gzip 압축 미들웨어 추가: 모든 응답을 압축하여 네트워크 전송량을 최소화합니다.
+# minimum_size=1000: 1000바이트 이상의 응답만 압축합니다.
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 
 # 비용 추적
@@ -239,22 +238,26 @@ class ChatResponse(BaseModel):
     cost: float = Field(..., description="비용 (USD)")
     tokens: int = Field(..., description="사용된 토큰 수")
     isComplete: bool | None = Field(True, description="응답 완료 여부")
-    continuationToken: str | None = Field(None, description="계속하기 토큰")
 
 
 class SpellCheckRequest(BaseModel):
     text: str = Field(..., description="맞춤법 검사할 텍스트")
     auto_correct: bool = Field(default=True, description="자동 수정 여부")
+    # AI 기반 교정을 위한 필드 추가
+    full_document: str | None = Field(None, description="전체 문서 컨텍스트")
+    use_ai: bool = Field(default=False, description="AI 기반 문맥 교정 사용 여부")
 
 
 class SpellCheckResponse(BaseModel):
-    success: bool = Field(..., description="성공 여부")
     original_text: str = Field(..., description="원본 텍스트")
     corrected_text: str = Field(..., description="수정된 텍스트")
     errors_found: int = Field(..., description="발견된 오타 수")
     error_words: list[str] = Field(..., description="오타 단어 목록")
     accuracy: float = Field(..., description="정확도 (%)")
     total_words: int = Field(..., description="총 단어 수")
+    # AI 기반 교정 결과를 위한 필드 추가
+    reason: str | None = Field(None, description="AI 교정 이유")
+    context_analysis: str | None = Field(None, description="AI 문맥 분석 결과")
 
 
 class CostStatusResponse(BaseModel):
@@ -312,9 +315,10 @@ class WebSearchStatsResponse(BaseModel):
 
 def calculate_cost(prompt_tokens: int, completion_tokens: int, model: str) -> float:
     """토큰 사용량에 따른 비용 계산"""
-    pricing = PRICING_PER_TOKEN.get(model, {"input": 0, "output": 0})
+    model_pricing = PRICING_PER_TOKEN.get(model, {"input": 0, "output": 0})
     cost = (
-        prompt_tokens * pricing["input"] + completion_tokens * pricing["output"]
+        prompt_tokens * model_pricing["input"]
+        + completion_tokens * model_pricing["output"]
     )
     monthly_usage["cost"] += cost
     monthly_usage["tokens"] += prompt_tokens + completion_tokens
@@ -324,159 +328,230 @@ def calculate_cost(prompt_tokens: int, completion_tokens: int, model: str) -> fl
 @app.get("/")
 async def root():
     """루트 엔드포인트"""
-    return {"message": "Loop AI API Server is running."}
+    return {"message": "Loop AI 서버가 실행 중입니다."}
 
 
-@app.post("/api/chat", response_model=ChatResponse)
-async def chat_endpoint(request: ChatRequest):
-    """채팅 메시지를 처리하고 AI의 응답을 반환합니다."""
-    if not chat_handler:
-        raise HTTPException(status_code=503, detail="채팅 핸들러가 초기화되지 않았습니다.")
+@app.post("/api/chat")
+async def chat_endpoint(request: ChatRequest) -> StreamingResponse:
+    """
+    채팅 엔드포인트. 스트리밍 응답을 사용하여 실시간 타이핑 효과를 제공합니다.
+    """
+    if not chat_handler or not openai_client:
+        raise HTTPException(
+            status_code=503,
+            detail="서버가 아직 준비되지 않았습니다. 잠시 후 다시 시도해주세요.",
+        )
 
     try:
-        # Pydantic 모델을 TypedDict로 변환
-        history_dicts: list[ChatHistoryItem] = [
-            {"role": msg.role, "content": msg.content} for msg in request.history
-        ]
-        result = await chat_handler.handle_request(
-            user_message=request.message, _history=history_dicts
+        # 1. 사용자 의도 및 레벨 파악
+        intent, level = chat_handler.detect_intent_and_level(request.message)
+
+        # 2. 의도에 따른 동적 프롬프트 생성 또는 핸들러 호출
+        if intent == "web_search":
+            generator = chat_handler.handle_web_search(request.message)
+        else:
+            # 2a. 프롬프트 생성 (intent가 프롬프트 템플릿 이름과 일치한다고 가정)
+            prompt = prompt_loader.get_prompt(
+                intent, user_message=request.message, level=level
+            )
+            # 2b. 프롬프트를 사용하여 스트리밍 응답 생성
+            generator = chat_handler.generate_response(
+                prompt=prompt,
+                max_tokens=request.maxTokens,
+                temperature=0.7,
+            )
+        
+        # 3. 스트리밍 응답 반환
+        return StreamingResponse(generator, media_type="text/event-stream")
+
+    except ValueError as e:
+        logger.error(f"프롬프트 생성 오류: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except APIConnectionError as e:
+        logger.error(f"OpenAI API 연결 오류: {e.__cause__}")
+        raise HTTPException(
+            status_code=503, detail="외부 API 서비스에 연결할 수 없습니다."
         )
-        return ChatResponse.model_validate(result)
     except Exception as e:
-        logger.error(f"❌ 채팅 처리 중 오류 발생: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="채팅 처리 중 오류가 발생했습니다.")
+        logger.exception(f"채팅 처리 중 예상치 못한 오류 발생: {e}")
+        raise HTTPException(status_code=500, detail="내부 서버 오류가 발생했습니다.")
 
 
 @app.post("/api/spellcheck", response_model=SpellCheckResponse)
-async def spellcheck_endpoint(request: SpellCheckRequest):
-    """텍스트의 맞춤법을 검사하고 수정합니다."""
+async def spellcheck_endpoint(request: SpellCheckRequest) -> SpellCheckResponse:
+    """맞춤법 검사 엔드포인트"""
     if not spellcheck_handler:
-        raise HTTPException(status_code=503, detail="맞춤법 검사 핸들러가 초기화되지 않았습니다.")
-    try:
-        result = spellcheck_handler.create_spellcheck_response(
-            request.text, request.auto_correct
+        raise HTTPException(
+            status_code=503,
+            detail="서버가 아직 준비되지 않았습니다. 잠시 후 다시 시도해주세요.",
         )
-        return SpellCheckResponse.model_validate(result)
+
+    try:
+        if request.use_ai and request.full_document:
+            # AI 기반 문맥 교정
+            result = await spellcheck_handler.context_aware_correction(
+                target_text=request.text, full_document=request.full_document
+            )
+        else:
+            # 기존 로컬 교정
+            result = spellcheck_handler.create_spellcheck_response(
+                request.text, request.auto_correct
+            )
+        
+        # TypedDict에서 Pydantic 모델로 안전하게 변환
+        return SpellCheckResponse(
+            original_text=result.get("original_text", request.text),
+            corrected_text=result.get("corrected_text", request.text),
+            errors_found=result.get("errors_found", 0),
+            error_words=result.get("error_words", []),
+            accuracy=result.get("accuracy", 100.0),
+            total_words=result.get("total_words", 0),
+            reason=result.get("reason"),
+            context_analysis=result.get("context_analysis"),
+        )
+
     except Exception as e:
-        logger.error(f"❌ 맞춤법 검사 중 오류 발생: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="맞춤법 검사 중 오류가 발생했습니다.")
+        logger.exception(f"맞춤법 검사 처리 중 오류 발생: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/cost-status", response_model=CostStatusResponse)
 async def get_cost_status():
-    """월간 비용 사용 현황을 반환합니다."""
-    usage_percentage = (
-        (monthly_usage["cost"] / MONTHLY_BUDGET) * 100 if MONTHLY_BUDGET > 0 else 0
-    )
+    """월별 비용 사용 현황 조회"""
+    cost = monthly_usage["cost"]
+    tokens = monthly_usage["tokens"]
+    usage_percentage = (cost / MONTHLY_BUDGET) * 100 if MONTHLY_BUDGET > 0 else 0
+
     return CostStatusResponse(
-        monthly_cost=monthly_usage["cost"],
+        monthly_cost=round(cost, 4),
         monthly_budget=MONTHLY_BUDGET,
-        usage_percentage=usage_percentage,
-        total_tokens=int(monthly_usage["tokens"]),
-        cache_hits=0,  # TODO: 실제 캐시 히트 수 구현
+        usage_percentage=round(usage_percentage, 2),
+        total_tokens=int(tokens),
+        cache_hits=response_cache.capacity - len(response_cache.cache),
     )
 
 
 @app.get("/api/spellcheck/stats")
 async def get_spellcheck_stats() -> ModuleStats:
-    """맞춤법 검사기 통계를 반환합니다."""
+    """맞춤법 검사기 통계 조회"""
     if not spellcheck_handler:
-        raise HTTPException(status_code=503, detail="맞춤법 검사 핸들러가 초기화되지 않았습니다.")
+        raise HTTPException(status_code=503, detail="맞춤법 검사기 준비 안됨")
     return spellcheck_handler.get_statistics()
 
 
 @app.get("/api/health")
 async def health_check():
-    """서버 상태 확인"""
-    return {
-        "status": "ok",
-        "timestamp": datetime.now().isoformat(),
-        "openai_client": "initialized" if openai_client else "not-initialized",
-        "handlers": {
-            "chat": "ok" if chat_handler else "fail",
-            "spellcheck": "ok" if spellcheck_handler else "fail",
-            "location": "ok" if location_handler else "fail",
-            "web_search": "ok" if web_search_handler else "fail",
-            "google_docs": "ok" if google_docs_handler else "fail",
-        },
-    }
+    """
+    서버의 상태를 확인하는 헬스 체크 엔드포인트입니다.
+    - OpenAI API 연결 상태 확인
+    - 핸들러 초기화 여부 확인
+    """
+    status = {"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()}
+    details = {}
+
+    # OpenAI 연결 상태 확인
+    if openai_client:
+        try:
+            _ = await openai_client.models.list(timeout=5)
+            details["openai_api"] = "connected"
+        except Exception as e:
+            details["openai_api"] = f"disconnected: {e}"
+            status["status"] = "error"
+    else:
+        details["openai_api"] = "not_initialized"
+        status["status"] = "error"
+
+    # 핸들러 초기화 확인
+    details["chat_handler"] = "initialized" if chat_handler else "not_initialized"
+    if not chat_handler:
+        status["status"] = "error"
+        
+    if status["status"] == "ok":
+        return status
+    else:
+        raise HTTPException(status_code=503, detail=details)
 
 
 @app.post("/api/location-suggest", response_model=LocationSuggestResponse)
-async def suggest_locations(request: LocationSuggestRequest):
-    """위치(도시/지역) 추천을 반환합니다."""
+async def suggest_locations(request: LocationSuggestRequest) -> LocationSuggestResponse:
+    """지역/도시명 추천 엔드포인트"""
     if not location_handler:
-        raise HTTPException(status_code=503, detail="위치 추천 핸들러가 초기화되지 않았습니다.")
-    try:
-        suggestions = location_handler.suggest_locations(request.query)
-        return LocationSuggestResponse(suggestions=suggestions)
-    except Exception as e:
-        logger.error(f"❌ 위치 추천 중 오류 발생: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="위치 추천 처리 중 오류가 발생했습니다.")
+        raise HTTPException(status_code=503, detail="Location handler not ready")
+
+    suggestions = location_handler.suggest_locations(request.query)
+    return LocationSuggestResponse(suggestions=suggestions)
 
 
 @app.post("/api/web-search", response_model=WebSearchResponse)
-async def web_search(request: WebSearchRequest):
-    """웹 검색을 수행하고 결과를 반환합니다."""
+async def web_search(request: WebSearchRequest) -> WebSearchResponse:
+    """웹 검색 엔드포인트"""
     if not web_search_handler:
-        raise HTTPException(status_code=503, detail="웹 검색 핸들러가 초기화되지 않았습니다.")
+        raise HTTPException(status_code=503, detail="Web search handler not ready")
 
-    start_time = datetime.now()
-    try:
-        summary, search_results = await web_search_handler.search(
-            query=request.query,
-            source=request.source,
-            num_results=request.num_results,
-            include_summary=request.include_summary,
-        )
+    start_time = time.time()
+    # search 메서드는 (summary, results_list) 튜플을 반환
+    summary, search_results = await web_search_handler.search(
+        query=request.query,
+        source=request.source,
+        num_results=request.num_results,
+        include_summary=request.include_summary,
+    )
+    end_time = time.time()
 
-        # results 리스트의 각 항목을 WebSearchResult 모델로 변환
-        validated_results = [
-            WebSearchResult.model_validate(item) for item in search_results
-        ]
-        end_time = datetime.now()
-        response_time = (end_time - start_time).total_seconds()
+    # WebSearchResult 모델로 변환
+    validated_results = [WebSearchResult(**r) for r in search_results]
 
-        return WebSearchResponse(
-            query=request.query,
-            source=request.source,
-            num_results=len(validated_results),
-            results=validated_results,
-            summary=summary,
-            timestamp=start_time.isoformat(),
-            from_cache=False,  # TODO: 캐시 로직과 연동 필요
-            response_time=response_time,
-        )
-    except Exception as e:
-        logger.error(f"❌ 웹 검색 중 오류 발생: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="웹 검색 처리 중 오류가 발생했습니다.")
+    return WebSearchResponse(
+        query=request.query, # 요청에서 query를 가져옴
+        source=request.source, # 요청에서 source를 가져옴
+        num_results=len(validated_results),
+        results=validated_results,
+        summary=summary,
+        timestamp=datetime.fromtimestamp(start_time).isoformat(),
+        from_cache=False, # TODO: 캐시 로직과 연동 필요
+        response_time=(end_time - start_time),
+    )
 
 
 @app.get("/api/web-search/stats", response_model=WebSearchStatsResponse)
 async def get_web_search_stats() -> WebSearchStatsResponse:
-    """웹 검색 통계를 반환합니다."""
+    """웹 검색 통계 조회"""
     if not web_search_handler:
-        raise HTTPException(status_code=503, detail="웹 검색 핸들러가 초기화되지 않았습니다.")
-
-    result = web_search_handler.get_statistics()
-    return WebSearchStatsResponse.model_validate(result)
+        raise HTTPException(status_code=503, detail="Web search handler not ready")
+    stats = web_search_handler.get_statistics()
+    # TypedDict를 Pydantic 모델로 안전하게 변환
+    return WebSearchStatsResponse(
+        total_searches=stats.get("total_searches", 0),
+        cache_hits=stats.get("cache_hits", 0),
+        cache_misses=stats.get("cache_misses", 0),
+        avg_response_time=stats.get("avg_response_time", 0.0),
+        last_search_time=stats.get("last_search_time"),
+        cache_enabled=stats.get("cache_enabled", False),
+    )
 
 
 @app.delete("/api/web-search/cache")
 async def clear_web_search_cache():
-    """웹 검색 캐시를 삭제합니다."""
+    """웹 검색 캐시 삭제"""
     if not web_search_handler:
-        raise HTTPException(status_code=503, detail="웹 검색 핸들러가 초기화되지 않았습니다.")
-    try:
-        success = await web_search_handler.clear_cache()
-        if success:
-            return {"message": "웹 검색 캐시가 성공적으로 삭제되었습니다."}
-        else:
-            raise HTTPException(status_code=500, detail="캐시 삭제에 실패했습니다.")
-    except Exception as e:
-        logger.error(f"❌ 웹 검색 캐시 삭제 중 오류 발생: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="캐시 삭제 중 오류가 발생했습니다.")
+        raise HTTPException(status_code=503, detail="Web search handler not ready")
+    _ = await web_search_handler.clear_cache()
+    return {"message": "Web search cache cleared successfully."}
+
+
+@app.post("/api/clear_cache")
+async def clear_cache_endpoint():
+    """
+    서버의 모든 캐시를 삭제합니다.
+    """
+    if chat_handler:
+        _ = chat_handler.clear_cache()
+    if web_search_handler:
+        _ = await web_search_handler.clear_cache()
+    response_cache.cache.clear()
+    logger.info("모든 서버 캐시가 성공적으로 삭제되었습니다.")
+    return {"message": "All server caches cleared successfully."}
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8001, log_level="info")
+    uvicorn.run(app, host="0.0.0.0", port=8000)

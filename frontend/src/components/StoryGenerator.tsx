@@ -5,6 +5,8 @@ import ChatHeader from './chat/ChatHeader'
 import ChatMessageList from './chat/ChatMessageList'
 import ChatInput from './chat/ChatInput'
 import SettingsSidebar from './chat/SettingsSidebar'
+import { useSmartCorrection } from '@/hooks/useSmartCorrection'
+import CorrectionSuggestion from './chat/CorrectionSuggestion'
 
 interface Message {
   id: string
@@ -31,6 +33,14 @@ const StoryGenerator: React.FC<StoryGeneratorProps> = ({ className = '' }) => {
   const [serverStatus, setServerStatus] = useState<'checking' | 'online' | 'offline'>('checking')
   const [isLongFormMode, setIsLongFormMode] = useState(false)
   const [maxTokens, setMaxTokens] = useState(4000)
+
+  // AI 스마트 교정 Hook
+  const fullDocumentForCorrection = messages.map(m => m.content).join('\n')
+  const { 
+    correction, 
+    isLoading: isCorrectionLoading, 
+    resetCorrection 
+  } = useSmartCorrection(inputMessage, fullDocumentForCorrection)
 
   // 서버 상태 확인
   useEffect(() => {
@@ -213,17 +223,38 @@ const StoryGenerator: React.FC<StoryGeneratorProps> = ({ className = '' }) => {
   const copyToClipboard = async (content: string) => {
     try {
       await navigator.clipboard.writeText(content)
+      const successMessage: Message = {
+        id: `success-${Date.now()}`,
+        type: 'assistant',
+        content: `✅ **클립보드에 복사되었습니다.**`,
+        timestamp: new Date()
+      }
+      setMessages(prev => [...prev, successMessage])
     } catch (err) {
-      console.error('클립보드 복사 실패:', err)
+      const errorMessage: Message = {
+        id: `error-${Date.now()}`,
+        type: 'assistant',
+        content: `❌ **복사 실패**: ${err instanceof Error ? err.message : '알 수 없는 오류'}`,
+        timestamp: new Date()
+      }
+      setMessages(prev => [...prev, errorMessage])
     }
   }
 
   const recommendedPrompts = [
-    '판타지 소설의 흥미로운 시작 부분을 써줘',
-    '두 명의 원수가 협력해야 하는 상황을 설정해줘',
-    '미래 도시의 모습을 묘사해줘',
+    '흥미로운 캐릭터 설정 3가지를 제안해줘',
+    '예상치 못한 반전이 있는 단편 소설의 시작 부분을 써줘',
     '일상적인 물건에 숨겨진 비밀에 대한 단편 소설 아이디어 줘'
   ]
+
+  const handleApplyCorrection = (correctedText: string) => {
+    setInputMessage(correctedText)
+    resetCorrection()
+  }
+
+  const handleDismissCorrection = () => {
+    resetCorrection()
+  }
 
   return (
     <div className={`flex flex-col h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 ${className}`}>
@@ -242,17 +273,32 @@ const StoryGenerator: React.FC<StoryGeneratorProps> = ({ className = '' }) => {
             onContinueStory={continueLastStory}
             onCopyToClipboard={copyToClipboard}
           />
-          <ChatInput
-            inputMessage={inputMessage}
-            setInputMessage={setInputMessage}
-            docId={docId}
-            setDocId={setDocId}
-            isLoading={isLoading}
-            onSendMessage={() => handleSendMessage(inputMessage)}
-            onGenerateFromDocs={generateFromGoogleDocs}
-            onExportToDocs={exportToGoogleDocs}
-            isMessagesEmpty={messages.length === 0}
-          />
+          <div className="relative">
+            {correction && !isCorrectionLoading && (
+              <CorrectionSuggestion
+                correction={correction}
+                onApply={handleApplyCorrection}
+                onDismiss={handleDismissCorrection}
+                isLoading={isCorrectionLoading}
+              />
+            )}
+            {isCorrectionLoading && (
+               <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-gray-700 text-white text-sm rounded-lg px-3 py-2 shadow-lg animate-pulse">
+                AI 분석 중...
+              </div>
+            )}
+            <ChatInput
+              inputMessage={inputMessage}
+              setInputMessage={setInputMessage}
+              docId={docId}
+              setDocId={setDocId}
+              isLoading={isLoading}
+              onSendMessage={() => handleSendMessage(inputMessage)}
+              onGenerateFromDocs={generateFromGoogleDocs}
+              onExportToDocs={exportToGoogleDocs}
+              isMessagesEmpty={messages.length === 0}
+            />
+          </div>
         </div>
         <SettingsSidebar
           showSettings={showSettings}
