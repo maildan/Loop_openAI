@@ -20,6 +20,7 @@ DATASET_DIR = os.path.join(PROJECT_ROOT, "dataset")
 def load_prompts_config() -> Dict[str, Any]:
     """
     PROMPT_DIR에 있는 모든 .yml 파일을 로드하여 하나의 딕셔너리로 병합합니다.
+    YAML 파일은 딕셔너리 형태이거나 프롬프트 객체의 리스트 형태일 수 있습니다.
     """
     combined_config: Dict[str, Any] = {"prompts": []}
     
@@ -27,16 +28,26 @@ def load_prompts_config() -> Dict[str, Any]:
         if filename.endswith(".yml") or filename.endswith(".yaml"):
             file_path = os.path.join(PROMPT_DIR, filename)
             with open(file_path, "r", encoding="utf-8") as f:
-                config = yaml.safe_load(f)
-                if config and "prompts" in config and isinstance(config["prompts"], list):
-                    combined_config["prompts"].extend(config["prompts"])
-                # master_system_prompt 같은 최상위 키도 병합
-                for key, value in config.items():
-                    if key != "prompts":
-                        combined_config[key] = value
+                data = yaml.safe_load(f)
+
+                if isinstance(data, dict):
+                    # YAML이 딕셔너리인 경우
+                    if "prompts" in data and isinstance(data.get("prompts"), list):
+                        combined_config["prompts"].extend(data["prompts"])
+                    
+                    for key, value in data.items():
+                        if key != "prompts":
+                            combined_config[key] = value
+                elif isinstance(data, list):
+                    # YAML이 리스트인 경우 (story_prompts.yml 같은 경우)
+                    # 각 항목이 딕셔너리인지 확인하여 안전하게 추가
+                    for item in data:
+                        if isinstance(item, dict):
+                            combined_config["prompts"].append(item)
+                # 다른 데이터 타입은 무시
 
     if not combined_config["prompts"]:
-        raise FileNotFoundError(f"프롬프트 파일이 존재하지 않습니다: {PROMPT_DIR}")
+        raise FileNotFoundError(f"프롬프트 파일이 존재하지 않거나 유효한 프롬프트가 없습니다: {PROMPT_DIR}")
         
     return combined_config
 

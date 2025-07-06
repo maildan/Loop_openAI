@@ -50,6 +50,7 @@ from src.inference.api.handlers import ChatHandler, SpellCheckHandler
 from src.inference.api.handlers.google_docs_handler import GoogleDocsHandler
 from src.inference.api.handlers.location_handler import LocationHandler
 from src.inference.api.handlers.web_search_handler import WebSearchHandler
+from src.inference.api.handlers.assistant_handler import AssistantHandler
 from src.utils.spellcheck import ModuleStats
 from src.shared.prompts import loader as prompt_loader
 
@@ -116,13 +117,14 @@ spellcheck_handler: SpellCheckHandler | None = None
 location_handler: LocationHandler | None = None
 web_search_handler: WebSearchHandler | None = None
 google_docs_handler: GoogleDocsHandler | None = None
+assistant_handler: AssistantHandler | None = None
 mcp_server: Any = None
 
 
 @asynccontextmanager
 async def lifespan(_app: "FastAPI") -> AsyncGenerator[None, None]:
     """서버 시작 및 종료 시 실행되는 이벤트 핸들러"""
-    global openai_client, chat_handler, spellcheck_handler, location_handler, web_search_handler, google_docs_handler, mcp_server
+    global openai_client, chat_handler, spellcheck_handler, location_handler, web_search_handler, google_docs_handler, assistant_handler, mcp_server
     logger.info("🚀 서버 시작 이벤트 발생")
 
     api_key = os.getenv("OPENAI_API_KEY")
@@ -139,7 +141,14 @@ async def lifespan(_app: "FastAPI") -> AsyncGenerator[None, None]:
     spellcheck_handler = SpellCheckHandler(openai_client)
     location_handler = LocationHandler()
     web_search_handler = WebSearchHandler(openai_client)
-    google_docs_handler = GoogleDocsHandler()
+    assistant_handler = AssistantHandler(openai_client)
+    
+    try:
+        google_docs_handler = GoogleDocsHandler()
+        logger.info("✅ Google Docs 핸들러 초기화 성공")
+    except Exception as e:
+        google_docs_handler = None
+        logger.warning(f"⚠️ Google Docs 핸들러 초기화 실패. 관련 기능이 비활성화됩니다. 오류: {e}")
 
     chat_handler.load_datasets()
     logger.info("✅ 모든 핸들러 및 데이터셋 초기화 완료")
@@ -260,6 +269,21 @@ class SpellCheckResponse(BaseModel):
     context_analysis: str | None = Field(None, description="AI 문맥 분석 결과")
 
 
+class SentenceImprovementRequest(BaseModel):
+    original_sentence: str = Field(..., description="개선을 원하는 원본 문장")
+    genre: str = Field(..., description="작품의 장르")
+    character_profile: str = Field(..., description="문장을 말하는 캐릭터의 프로필")
+    context: str = Field(..., description="문장의 앞뒤 문맥")
+    model: str | None = Field(None, description="사용할 모델 (e.g., gpt-4o-mini)")
+
+
+class SentenceImprovementResponse(BaseModel):
+    suggestions: dict[str, Any]
+    model: str
+    cost: float
+    tokens: int
+
+
 class CostStatusResponse(BaseModel):
     monthly_cost: float
     monthly_budget: float
@@ -313,6 +337,66 @@ class WebSearchStatsResponse(BaseModel):
     cache_enabled: bool
 
 
+class PlotHoleDetectionRequest(BaseModel):
+    full_story_text: str = Field(..., min_length=100, description="분석할 전체 스토리 텍스트")
+    model: str | None = Field("gpt-4o", description="사용할 AI 모델")
+
+
+class PlotHoleDetectionResponse(BaseModel):
+    detection_report: str = Field(..., description="플롯 홀 탐지 결과 보고서")
+    model: str
+    cost: float
+    tokens: int
+
+
+class CharacterConsistencyRequest(BaseModel):
+    character_name: str = Field(..., description="분석할 캐릭터 이름")
+    personality: str = Field(..., description="캐릭터 성격")
+    speech_style: str = Field(..., description="캐릭터 말투")
+    core_values: str = Field(..., description="캐릭터 핵심 가치관/목표")
+    other_settings: str = Field("", description="기타 설정")
+    story_text_for_analysis: str = Field(..., description="분석할 작품 텍스트")
+    model: str | None = Field("gpt-4o", description="사용할 AI 모델")
+
+
+class CharacterConsistencyResponse(BaseModel):
+    consistency_report: str = Field(..., description="캐릭터 일관성 검증 보고서")
+    model: str
+    cost: float
+    tokens: int
+
+
+class CliffhangerRequest(BaseModel):
+    genre: str = Field(..., description="작품의 장르")
+    scene_context: str = Field(..., description="클리프행어를 생성할 장면의 맥락")
+    model: str | None = Field("gpt-4o", description="사용할 AI 모델")
+
+
+class CliffhangerSuggestion(BaseModel):
+    suggestion: str
+    expected_reaction: str
+
+
+class CliffhangerResponse(BaseModel):
+    suggestions: list[CliffhangerSuggestion]
+    model: str
+    cost: float
+    tokens: int
+
+
+class ReaderResponseRequest(BaseModel):
+    platform: str = Field(..., description="타겟 웹소설 플랫폼 (e.g., '카카오페이지', '네이버 시리즈')")
+    scene_context: str = Field(..., description="분석할 장면의 맥락")
+    model: str | None = Field("gpt-4o", description="사용할 AI 모델")
+
+
+class ReaderResponseResponse(BaseModel):
+    prediction_report: dict[str, Any]
+    model: str
+    cost: float
+    tokens: int
+
+
 def calculate_cost(prompt_tokens: int, completion_tokens: int, model: str) -> float:
     """토큰 사용량에 따른 비용 계산"""
     model_pricing = PRICING_PER_TOKEN.get(model, {"input": 0, "output": 0})
@@ -350,9 +434,12 @@ async def chat_endpoint(request: ChatRequest) -> StreamingResponse:
         if intent == "web_search":
             generator = chat_handler.handle_web_search(request.message)
         else:
-            # 2a. 프롬프트 생성 (intent가 프롬프트 템플릿 이름과 일치한다고 가정)
+            # 'greeting' 의도일 경우 'general' 프롬프트를 사용하도록 매핑
+            prompt_name = "general" if intent == "greeting" else intent
+            
+            # 2a. 프롬프트 생성
             prompt = prompt_loader.get_prompt(
-                intent, user_message=request.message, level=level
+                prompt_name, user_message=request.message, level=level
             )
             # 2b. 프롬프트를 사용하여 스트리밍 응답 생성
             generator = chat_handler.generate_response(
@@ -395,8 +482,8 @@ async def spellcheck_endpoint(request: SpellCheckRequest) -> SpellCheckResponse:
         else:
             # 기존 로컬 교정
             result = spellcheck_handler.create_spellcheck_response(
-                request.text, request.auto_correct
-            )
+            request.text, request.auto_correct
+        )
         
         # TypedDict에서 Pydantic 모델로 안전하게 변환
         return SpellCheckResponse(
@@ -471,7 +558,6 @@ async def health_check():
     else:
         raise HTTPException(status_code=503, detail=details)
 
-
 @app.post("/api/location-suggest", response_model=LocationSuggestResponse)
 async def suggest_locations(request: LocationSuggestRequest) -> LocationSuggestResponse:
     """지역/도시명 추천 엔드포인트"""
@@ -491,11 +577,11 @@ async def web_search(request: WebSearchRequest) -> WebSearchResponse:
     start_time = time.time()
     # search 메서드는 (summary, results_list) 튜플을 반환
     summary, search_results = await web_search_handler.search(
-        query=request.query,
-        source=request.source,
-        num_results=request.num_results,
-        include_summary=request.include_summary,
-    )
+            query=request.query,
+            source=request.source,
+            num_results=request.num_results,
+            include_summary=request.include_summary,
+        )
     end_time = time.time()
 
     # WebSearchResult 모델로 변환
@@ -535,15 +621,45 @@ async def clear_web_search_cache():
     """웹 검색 캐시 삭제"""
     if not web_search_handler:
         raise HTTPException(status_code=503, detail="Web search handler not ready")
-    _ = await web_search_handler.clear_cache()
-    return {"message": "Web search cache cleared successfully."}
+    await web_search_handler.clear_cache()
+    return {"status": "Web search cache cleared"}
+
+
+@app.post("/api/improve-sentence", response_model=SentenceImprovementResponse)
+async def improve_sentence_endpoint(request: SentenceImprovementRequest):
+    """
+    AI를 사용하여 문장을 3가지 버전으로 개선합니다.
+    - 생생한 묘사 버전
+    - 간결하고 힘있는 버전
+    - 캐릭터의 목소리 버전
+    """
+    if not assistant_handler:
+        raise HTTPException(status_code=503, detail="Assistant handler is not initialized")
+    
+    try:
+        result = await assistant_handler.improve_sentence(
+            original_sentence=request.original_sentence,
+            genre=request.genre,
+            character_profile=request.character_profile,
+            context=request.context,
+            model=request.model,
+        )
+        return SentenceImprovementResponse(
+            suggestions=result["suggestions"],
+            model=result["model"],
+            cost=result["cost"],
+            tokens=result["tokens"],
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"문장 개선 처리 중 에러: {e}")
+        raise HTTPException(status_code=500, detail="Internal Server Error")
 
 
 @app.post("/api/clear_cache")
 async def clear_cache_endpoint():
-    """
-    서버의 모든 캐시를 삭제합니다.
-    """
+    """모든 캐시를 지웁니다."""
     if chat_handler:
         _ = chat_handler.clear_cache()
     if web_search_handler:
@@ -551,6 +667,129 @@ async def clear_cache_endpoint():
     response_cache.cache.clear()
     logger.info("모든 서버 캐시가 성공적으로 삭제되었습니다.")
     return {"message": "All server caches cleared successfully."}
+
+
+@app.post("/detect-plot-holes", response_model=PlotHoleDetectionResponse, tags=["AI Assistant"], summary="실시간 플롯 홀 감지", description="이야기 전체 텍스트를 분석하여 플롯 홀, 설정 충돌 등을 감지합니다.")
+async def detect_plot_holes_endpoint(request: PlotHoleDetectionRequest) -> PlotHoleDetectionResponse:
+    if not assistant_handler:
+        raise HTTPException(
+            status_code=503, detail="AssistantHandler is not initialized"
+        )
+    try:
+        result = await assistant_handler.detect_plot_holes(
+            full_story_text=request.full_story_text,
+            model=request.model,
+        )
+        return PlotHoleDetectionResponse(
+            detection_report=result["detection_report"],
+            model=result["model"],
+            cost=result["cost"],
+            tokens=result["tokens"],
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"플롯 홀 감지 처리 중 에러: {e}")
+        raise HTTPException(status_code=500, detail="Internal Server Error")
+
+
+@app.post(
+    "/check-character-consistency",
+    response_model=CharacterConsistencyResponse,
+    tags=["AI Assistant"],
+    summary="캐릭터 일관성 체크",
+    description="캐릭터 프로필과 실제 작품 내용을 비교하여 설정 붕괴를 감지합니다.",
+)
+async def check_character_consistency_endpoint(
+    request: CharacterConsistencyRequest,
+) -> CharacterConsistencyResponse:
+    if not assistant_handler:
+        raise HTTPException(
+            status_code=503, detail="AssistantHandler is not initialized"
+        )
+    try:
+        result = await assistant_handler.check_character_consistency(
+            character_name=request.character_name,
+            personality=request.personality,
+            speech_style=request.speech_style,
+            core_values=request.core_values,
+            other_settings=request.other_settings,
+            story_text_for_analysis=request.story_text_for_analysis,
+            model=request.model,
+        )
+        return CharacterConsistencyResponse(
+            consistency_report=result["consistency_report"],
+            model=result["model"],
+            cost=result["cost"],
+            tokens=result["tokens"],
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"캐릭터 일관성 검증 처리 중 에러: {e}")
+        raise HTTPException(status_code=500, detail="Internal Server Error")
+
+
+@app.post(
+    "/generate-cliffhanger",
+    response_model=CliffhangerResponse,
+    tags=["AI Assistant"],
+    summary="지능형 클리프행어 생성기",
+    description="장르와 장면 맥락에 맞는 클리프행어 아이디어를 독자 반응 예측과 함께 제안합니다.",
+)
+async def generate_cliffhanger_endpoint(request: CliffhangerRequest) -> CliffhangerResponse:
+    if not assistant_handler:
+        raise HTTPException(
+            status_code=503, detail="AssistantHandler is not initialized"
+        )
+    try:
+        result = await assistant_handler.generate_cliffhanger(
+            genre=request.genre,
+            scene_context=request.scene_context,
+            model=request.model,
+        )
+        return CliffhangerResponse(
+            suggestions=result["suggestions"],
+            model=result["model"],
+            cost=result["cost"],
+            tokens=result["tokens"],
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"클리프행어 생성 처리 중 에러: {e}")
+        raise HTTPException(status_code=500, detail="Internal Server Error")
+
+
+@app.post(
+    "/predict-reader-response",
+    response_model=ReaderResponseResponse,
+    tags=["AI Assistant"],
+    summary="독자 반응 예측 AI",
+    description="특정 장면에 대한 플랫폼별 독자 반응(댓글, 이탈률 등)을 예측하고 개선안을 제안합니다.",
+)
+async def predict_reader_response_endpoint(request: ReaderResponseRequest) -> ReaderResponseResponse:
+    if not assistant_handler:
+        raise HTTPException(
+            status_code=503, detail="AssistantHandler is not initialized"
+        )
+    try:
+        result = await assistant_handler.predict_reader_response(
+            platform=request.platform,
+            scene_context=request.scene_context,
+            model=request.model,
+        )
+        return ReaderResponseResponse(
+            prediction_report=result["prediction_report"],
+            model=result["model"],
+            cost=result["cost"],
+            tokens=result["tokens"],
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"독자 반응 예측 처리 중 에러: {e}")
+        raise HTTPException(status_code=500, detail="Internal Server Error")
 
 
 if __name__ == "__main__":

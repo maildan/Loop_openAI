@@ -113,25 +113,53 @@ const StoryGenerator: React.FC<StoryGeneratorProps> = ({ className = '' }) => {
 
       if (!response.ok) {
         const errorText = await response.text()
-        throw new Error(JSON.parse(errorText).error || `HTTP ${response.status}`)
+        try {
+            const errorJson = JSON.parse(errorText)
+            throw new Error(errorJson.detail || errorJson.error || `HTTP ${response.status}`)
+        } catch(e) {
+            throw new Error(errorText || `HTTP ${response.status}`)
+        }
       }
 
-      const data = await response.json()
-      if (!data.response) throw new Error('서버에서 빈 응답을 받았습니다.')
+      if (!response.body) {
+        throw new Error('스트리밍 응답을 받지 못했습니다.')
+      }
 
-      const assistantMessage: Message = {
-        id: `assistant-${Date.now()}`,
+      // 스트리밍 처리 로직
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let assistantResponse = ''
+      const assistantMessageId = `assistant-${Date.now()}`
+
+      // 먼저 빈 어시스턴트 메시지 추가
+      setMessages(prev => [...prev, {
+        id: assistantMessageId,
         type: 'assistant',
-        content: data.response,
+        content: '...',
         timestamp: new Date(),
-        model: data.model,
-        cost: data.cost,
-        isComplete: data.isComplete,
-        continuationToken: data.continuationToken
-      }
+        model: 'gpt-4o-mini',
+        isComplete: false
+      }])
 
-      setMessages(prev => [...prev, assistantMessage])
-      if (data.cost) setTotalCost(prev => prev + data.cost)
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        assistantResponse += decoder.decode(value, { stream: true })
+        setMessages(prev => prev.map(msg => 
+          msg.id === assistantMessageId 
+            ? { ...msg, content: assistantResponse }
+            : msg
+        ))
+      }
+      
+      // 최종적으로 isComplete 플래그 업데이트
+      setMessages(prev => prev.map(msg => 
+        msg.id === assistantMessageId 
+          ? { ...msg, isComplete: true }
+          : msg
+      ))
+
       setServerStatus('online')
 
     } catch (error) {
@@ -287,17 +315,17 @@ const StoryGenerator: React.FC<StoryGeneratorProps> = ({ className = '' }) => {
                 AI 분석 중...
               </div>
             )}
-            <ChatInput
-              inputMessage={inputMessage}
-              setInputMessage={setInputMessage}
-              docId={docId}
-              setDocId={setDocId}
-              isLoading={isLoading}
-              onSendMessage={() => handleSendMessage(inputMessage)}
-              onGenerateFromDocs={generateFromGoogleDocs}
-              onExportToDocs={exportToGoogleDocs}
-              isMessagesEmpty={messages.length === 0}
-            />
+          <ChatInput
+            inputMessage={inputMessage}
+            setInputMessage={setInputMessage}
+            docId={docId}
+            setDocId={setDocId}
+            isLoading={isLoading}
+            onSendMessage={() => handleSendMessage(inputMessage)}
+            onGenerateFromDocs={generateFromGoogleDocs}
+            onExportToDocs={exportToGoogleDocs}
+            isMessagesEmpty={messages.length === 0}
+          />
           </div>
         </div>
         <SettingsSidebar

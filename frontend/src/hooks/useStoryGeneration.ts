@@ -61,7 +61,7 @@ export const useStoryGeneration = () => {
       })
 
       console.log('📡 응답 상태:', response.status, response.statusText)
-
+      
       if (!response.ok) {
         const errorText = await response.text()
         console.error('❌ 에러 응답:', errorText)

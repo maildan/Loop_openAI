@@ -178,8 +178,10 @@ class ChatHandler:
             "이야기 만들",
         ]
 
-        if any(keyword in cleaned_message for keyword in creation_keywords):
-            return "creation", detected_level
+        # 창작 의도가 다른 의도보다 우선 순위가 높지만, 가장 마지막에 체크하여
+        # '시놉시스 써줘' 같은 더 구체적인 요청을 놓치지 않도록 함.
+        # if any(keyword in cleaned_message for keyword in creation_keywords):
+        #    return "creation", detected_level
 
         # 기타 의도 분류
         intent_keywords = {
@@ -194,6 +196,15 @@ class ChatHandler:
             if any(keyword in cleaned_message for keyword in keywords):
                 return intent, detected_level
 
+        # 창작 관련 키워드가 있지만, 내용이 매우 짧고 모호한 경우
+        # "소설 써줘", "이야기 하나만" 같은 경우를 처리하기 위함.
+        if any(keyword in cleaned_message for keyword in creation_keywords):
+            # 토큰화하여 단어 수를 세는 것이 더 정확할 수 있지만, 우선 길이로 판단
+            if len(cleaned_message) < 15:
+                return "zero_input_story_generation", detected_level
+            else:
+                return "creation", detected_level
+                
         return "general", detected_level
 
     def create_practice_prompt(self, user_message: str, level: str) -> str:

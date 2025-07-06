@@ -90,7 +90,7 @@ mcp[cli]
 nltk>=3.8.1
 numpy>=1.24.3
 pandas>=2.0.3
-matplotlib>=3.7.2
+matplotlib>=3.7.2 
 
 # 교정 및 문체 분석을 위한 라이브러리 추가
 py-hanspell

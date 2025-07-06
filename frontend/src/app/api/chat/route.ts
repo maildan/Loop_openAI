@@ -56,21 +56,21 @@ function iteratorToStream(iterator: AsyncGenerator<any, void, unknown>) {
 export async function POST(request: NextRequest) {
   try {
     const requestData = await request.json()
-
+    
     // 백엔드로 스트리밍 요청 전달
-    const response = await fetch(`${backendUrl}/api/chat`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
+      const response = await fetch(`${backendUrl}/api/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         'Accept': 'text/plain', // 스트림을 기대함을 명시
-      },
+        },
       body: JSON.stringify(requestData),
-    })
+      })
 
     // 백엔드에서 에러 응답이 온 경우
-    if (!response.ok) {
-      const errorText = await response.text()
-      console.error('❌ Backend API 오류:', response.status, errorText)
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('❌ Backend API 오류:', response.status, errorText)
       return new Response(errorText, {
         status: response.status,
         headers: { 'Content-Type': 'application/json' },
@@ -86,8 +86,8 @@ export async function POST(request: NextRequest) {
           'Content-Type': 'text/plain; charset=utf-8',
         },
       })
-    }
-
+      }
+      
     return new Response('백엔드에서 응답이 없습니다.', { status: 500 })
 
   } catch (error) {
