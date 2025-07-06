@@ -141,7 +141,7 @@ async def lifespan(_app: "FastAPI") -> AsyncGenerator[None, None]:
     spellcheck_handler = SpellCheckHandler(openai_client)
     location_handler = LocationHandler()
     web_search_handler = WebSearchHandler(openai_client)
-    assistant_handler = AssistantHandler(openai_client)
+    assistant_handler = AssistantHandler(openai_client, web_search_handler)
     
     try:
         google_docs_handler = GoogleDocsHandler()
@@ -344,6 +344,18 @@ class PlotHoleDetectionRequest(BaseModel):
 
 class PlotHoleDetectionResponse(BaseModel):
     detection_report: str = Field(..., description="플롯 홀 탐지 결과 보고서")
+    model: str
+    cost: float
+    tokens: int
+
+
+class SmartSentenceImprovementRequest(BaseModel):
+    original_text: str = Field(..., description="개선을 원하는 원본 텍스트")
+    model: str | None = Field(None, description="사용할 AI 모델 (e.g., gpt-4o-mini)")
+
+
+class SmartSentenceImprovementResponse(BaseModel):
+    improvement_suggestions: str
     model: str
     cost: float
     tokens: int
@@ -669,7 +681,13 @@ async def clear_cache_endpoint():
     return {"message": "All server caches cleared successfully."}
 
 
-@app.post("/detect-plot-holes", response_model=PlotHoleDetectionResponse, tags=["AI Assistant"], summary="실시간 플롯 홀 감지", description="이야기 전체 텍스트를 분석하여 플롯 홀, 설정 충돌 등을 감지합니다.")
+@app.post(
+    "/api/v1/story/analyze/plot-holes",
+    response_model=PlotHoleDetectionResponse,
+    tags=["AI Assistant"],
+    summary="실시간 플롯 홀 감지",
+    description="이야기 전체 텍스트를 분석하여 플롯 홀, 설정 충돌 등을 감지합니다.",
+)
 async def detect_plot_holes_endpoint(request: PlotHoleDetectionRequest) -> PlotHoleDetectionResponse:
     if not assistant_handler:
         raise HTTPException(
@@ -677,24 +695,19 @@ async def detect_plot_holes_endpoint(request: PlotHoleDetectionRequest) -> PlotH
         )
     try:
         result = await assistant_handler.detect_plot_holes(
-            full_story_text=request.full_story_text,
-            model=request.model,
+            full_story_text=request.full_story_text, model=request.model
         )
-        return PlotHoleDetectionResponse(
-            detection_report=result["detection_report"],
-            model=result["model"],
-            cost=result["cost"],
-            tokens=result["tokens"],
-        )
+        return PlotHoleDetectionResponse(**result)
     except ValueError as e:
+        logger.error(f"플롯 홀 감지 API 오류: {e}")
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"플롯 홀 감지 처리 중 에러: {e}")
+        logger.exception("플롯 홀 감지 중 예상치 못한 서버 오류 발생")
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
 
 @app.post(
-    "/check-character-consistency",
+    "/api/v1/story/analyze/character-consistency",
     response_model=CharacterConsistencyResponse,
     tags=["AI Assistant"],
     summary="캐릭터 일관성 체크",
@@ -717,21 +730,17 @@ async def check_character_consistency_endpoint(
             story_text_for_analysis=request.story_text_for_analysis,
             model=request.model,
         )
-        return CharacterConsistencyResponse(
-            consistency_report=result["consistency_report"],
-            model=result["model"],
-            cost=result["cost"],
-            tokens=result["tokens"],
-        )
+        return CharacterConsistencyResponse(**result)
     except ValueError as e:
+        logger.error(f"캐릭터 일관성 검증 API 오류: {e}")
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"캐릭터 일관성 검증 처리 중 에러: {e}")
+        logger.exception("캐릭터 일관성 검증 중 예상치 못한 서버 오류 발생")
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
 
 @app.post(
-    "/generate-cliffhanger",
+    "/api/v1/story/generate/cliffhanger",
     response_model=CliffhangerResponse,
     tags=["AI Assistant"],
     summary="지능형 클리프행어 생성기",
@@ -744,25 +753,25 @@ async def generate_cliffhanger_endpoint(request: CliffhangerRequest) -> Cliffhan
         )
     try:
         result = await assistant_handler.generate_cliffhanger(
-            genre=request.genre,
-            scene_context=request.scene_context,
-            model=request.model,
+            genre=request.genre, scene_context=request.scene_context, model=request.model
         )
+        suggestions_list = [CliffhangerSuggestion(**item) for item in result.get("suggestions", [])]
         return CliffhangerResponse(
-            suggestions=result["suggestions"],
-            model=result["model"],
-            cost=result["cost"],
-            tokens=result["tokens"],
+            suggestions=suggestions_list,
+            model=result.get("model", "unknown"),
+            cost=result.get("cost", 0.0),
+            tokens=result.get("tokens", 0),
         )
     except ValueError as e:
+        logger.error(f"클리프행어 생성 API 오류: {e}")
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"클리프행어 생성 처리 중 에러: {e}")
+        logger.exception("클리프행어 생성 중 예상치 못한 서버 오류 발생")
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
 
 @app.post(
-    "/predict-reader-response",
+    "/api/v1/story/predict/reader-response",
     response_model=ReaderResponseResponse,
     tags=["AI Assistant"],
     summary="독자 반응 예측 AI",
@@ -780,15 +789,181 @@ async def predict_reader_response_endpoint(request: ReaderResponseRequest) -> Re
             model=request.model,
         )
         return ReaderResponseResponse(
-            prediction_report=result["prediction_report"],
-            model=result["model"],
-            cost=result["cost"],
-            tokens=result["tokens"],
+            prediction_report=result.get("prediction_report", {}),
+            model=result.get("model", "unknown"),
+            cost=result.get("cost", 0.0),
+            tokens=result.get("tokens", 0),
         )
     except ValueError as e:
+        logger.error(f"독자 반응 예측 API 오류: {e}")
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"독자 반응 예측 처리 중 에러: {e}")
+        logger.exception("독자 반응 예측 중 예상치 못한 서버 오류 발생")
+        raise HTTPException(status_code=500, detail="Internal Server Error")
+
+
+@app.post(
+    "/api/v1/story/analyze/sentence-improvement",
+    response_model=SmartSentenceImprovementResponse,
+    tags=["AI Assistant"],
+    summary="스마트 문장 개선",
+    description="단일 문장 또는 짧은 단락을 분석하여 문체, 리듬, 명확성 측면에서 여러 개선안을 제안합니다.",
+)
+async def smart_sentence_improvement_endpoint(
+    request: SmartSentenceImprovementRequest,
+) -> SmartSentenceImprovementResponse:
+    if not assistant_handler:
+        raise HTTPException(
+            status_code=503, detail="AssistantHandler is not initialized"
+        )
+    try:
+        result = await assistant_handler.run_smart_sentence_improvement(
+            original_text=request.original_text, model=request.model
+        )
+        return SmartSentenceImprovementResponse(**result)
+    except ValueError as e:
+        logger.error(f"스마트 문장 개선 API 오류: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("스마트 문장 개선 중 예상치 못한 서버 오류 발생")
+        raise HTTPException(status_code=500, detail="Internal Server Error")
+
+
+# --- 에피소드 길이 최적화 ---
+class EpisodeLengthRequest(BaseModel):
+    platform: str = Field(..., description="타겟 웹소설 플랫폼 (e.g., '카카오페이지', '네이버 시리즈')")
+    episode_text: str = Field(..., description="분량이 최적화될 전체 에피소드 텍스트")
+    model: str | None = Field("gpt-4o", description="사용할 AI 모델")
+
+class EpisodeLengthResponse(BaseModel):
+    optimization_report: dict[str, Any]
+    model: str
+    cost: float
+    tokens: int
+
+@app.post(
+    "/api/v1/story/optimize/episode-length",
+    response_model=EpisodeLengthResponse,
+    tags=["AI Assistant"],
+    summary="에피소드 길이 최적화",
+    description="플랫폼 특성에 맞춰 에피소드 분량 및 분할 지점을 최적화합니다.",
+)
+async def optimize_episode_length_endpoint(request: EpisodeLengthRequest) -> EpisodeLengthResponse:
+    """에피소드 길이 최적화 AI 엔드포인트"""
+    if not assistant_handler:
+        raise HTTPException(
+            status_code=503, detail="AssistantHandler is not initialized"
+        )
+    try:
+        result = await assistant_handler.optimize_episode_length(
+            platform=request.platform,
+            episode_text=request.episode_text,
+            model=request.model,
+        )
+        return EpisodeLengthResponse(
+            optimization_report=result.get("optimization_report", {}),
+            model=result.get("model", "unknown"),
+            cost=result.get("cost", 0.0),
+            tokens=result.get("tokens", 0),
+        )
+    except ValueError as e:
+        logger.error(f"에피소드 길이 최적화 API 오류: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("에피소드 길이 최적화 중 예상치 못한 서버 오류 발생")
+        raise HTTPException(status_code=500, detail="Internal Server Error")
+
+
+# --- AI 베타리더 ---
+class BetaReadRequest(BaseModel):
+    manuscript: str = Field(..., description="베타 리딩을 요청할 원고 전문")
+    genre: str = Field(..., description="작품의 장르")
+    target_audience: str = Field(..., description="타겟 독자층")
+    author_concerns: str | None = Field(None, description="작가가 특별히 우려하는 점")
+    model: str | None = Field("gpt-4o", description="사용할 AI 모델")
+
+class BetaReadResponse(BaseModel):
+    beta_read_report: dict[str, Any]
+    model: str
+    cost: float
+    tokens: int
+
+@app.post(
+    "/api/v1/story/analyze/beta-read",
+    response_model=BetaReadResponse,
+    tags=["AI Assistant"],
+    summary="AI 베타리더 종합 분석",
+    description="원고 전체를 다각도로 분석하여 종합적인 피드백 리포트를 제공합니다.",
+)
+async def request_beta_read_endpoint(request: BetaReadRequest) -> BetaReadResponse:
+    """AI 베타리더 엔드포인트"""
+    if not assistant_handler:
+        raise HTTPException(
+            status_code=503, detail="AssistantHandler is not initialized"
+        )
+    try:
+        result = await assistant_handler.get_beta_read_feedback(
+            manuscript=request.manuscript,
+            genre=request.genre,
+            target_audience=request.target_audience,
+            author_concerns=request.author_concerns,
+            model=request.model,
+        )
+        return BetaReadResponse(
+            beta_read_report=result.get("beta_read_report", {}),
+            model=result.get("model", "unknown"),
+            cost=result.get("cost", 0.0),
+            tokens=result.get("tokens", 0),
+        )
+    except ValueError as e:
+        logger.error(f"AI 베타리딩 API 오류: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("AI 베타리딩 중 예상치 못한 서버 오류 발생")
+        raise HTTPException(status_code=500, detail="Internal Server Error")
+
+
+# --- 트렌드 분석 & 적용 ---
+class TrendAnalysisRequest(BaseModel):
+    genre: str = Field(..., description="분석할 작품의 장르")
+    synopsis: str = Field(..., description="작품의 간단한 시놉시스")
+    keywords: list[str] = Field(default=[], description="작품의 핵심 키워드")
+    platform: str = Field("카카오페이지", description="분석을 원하는 타겟 플랫폼")
+    model: str | None = Field("gpt-4o", description="사용할 AI 모델")
+
+class TrendAnalysisResponse(BaseModel):
+    trend_report: str
+    model: str
+    cost: float
+    tokens: int
+    searched_data: list[dict[str, Any]]
+
+@app.post(
+    "/api/v1/story/analyze/trends",
+    response_model=TrendAnalysisResponse,
+    tags=["AI Assistant"],
+    summary="웹소설 트렌드 분석 및 적용",
+    description="실시간 웹 검색을 통해 최신 트렌드를 분석하고, 작품에 적용할 아이디어를 제안합니다.",
+)
+async def analyze_trends_endpoint(request: TrendAnalysisRequest) -> TrendAnalysisResponse:
+    if not assistant_handler or not assistant_handler.web_search_handler:
+        raise HTTPException(
+            status_code=503, detail="AssistantHandler or WebSearchHandler is not initialized"
+        )
+    try:
+        result = await assistant_handler.analyze_trends(
+            genre=request.genre,
+            synopsis=request.synopsis,
+            keywords=request.keywords,
+            platform=request.platform,
+            model=request.model,
+        )
+        return TrendAnalysisResponse(**result)
+    except ValueError as e:
+        logger.error(f"트렌드 분석 API 오류: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("트렌드 분석 중 예상치 못한 서버 오류 발생")
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
 
