@@ -54,7 +54,7 @@ numpy>=1.24.0
 requests>=2.31.0
 
 # 맞춤법 검사
-# py-hanspell>=1.1
+git+https://github.com/ssut/py-hanspell.git#egg=py-hanspell
 beautifulsoup4>=4.9.3
 
 # 캐싱 및 데이터베이스
@@ -87,12 +87,9 @@ mcp[cli]
 
 # 추가 유틸리티
 nltk>=3.8.1
-numpy>=1.24.3
-pandas>=2.0.3
 matplotlib>=3.7.2 
 
 # 교정 및 문체 분석을 위한 라이브러리 추가
-py-hanspell
 soynlp
 
 # 추가 유틸리티

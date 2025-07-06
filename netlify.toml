@@ -20,6 +20,8 @@
   PNPM_VERSION = "10.12.1"
   RUSTUP_HOME = "/opt/buildhome/.rustup"
   CARGO_HOME = "/opt/buildhome/.cargo"
+  GIT_TERMINAL_PROMPT = "0"
+  GIT_SSH_COMMAND = "ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no"
 
 # Python 패키지 설치를 위한 환경 설정
 [build.processing]
