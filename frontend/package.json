@@ -3,11 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 8080",
+    "dev": "next dev -p 8000",
     "build": "next build",
     "start": "next start",
-    "dev:all": "concurrently \"npm run dev\" \"cd .. && python src/inference/api/server.py\"",
-    "fastapi": "cd .. && python -m uvicorn src.inference.server:app --reload --port 8000",
     "lint": "next lint"
   },
   "dependencies": {

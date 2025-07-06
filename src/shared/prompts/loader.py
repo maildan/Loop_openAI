@@ -4,13 +4,12 @@ YAML 형식의 프롬프트 파일을 로드하고 관리하는 모듈
 import yaml
 import os
 import json
-from typing import Any, Dict
+from typing import Any, Dict, List
 from jinja2 import Environment, FileSystemLoader, BaseLoader, TemplateNotFound
 
 # --- 상수 정의 ---
 # 현재 파일의 디렉토리를 기준으로 경로를 설정합니다.
 PROMPT_DIR = os.path.dirname(__file__)
-PROMPTS_FILE = os.path.join(PROMPT_DIR, "story_prompts.yml")
 # dataset 디렉토리는 프로젝트 루트에 있다고 가정합니다.
 # loader.py -> prompts -> shared -> src -> loop_ai (project_root)
 PROJECT_ROOT = os.path.abspath(os.path.join(PROMPT_DIR, '..', '..', '..'))
@@ -20,13 +19,26 @@ DATASET_DIR = os.path.join(PROJECT_ROOT, "dataset")
 
 def load_prompts_config() -> Dict[str, Any]:
     """
-    story_prompts.yml 파일을 로드하여 딕셔너리로 반환합니다.
+    PROMPT_DIR에 있는 모든 .yml 파일을 로드하여 하나의 딕셔너리로 병합합니다.
     """
-    if not os.path.exists(PROMPTS_FILE):
-        raise FileNotFoundError(f"프롬프트 파일이 존재하지 않습니다: {PROMPTS_FILE}")
+    combined_config: Dict[str, Any] = {"prompts": []}
+    
+    for filename in os.listdir(PROMPT_DIR):
+        if filename.endswith(".yml") or filename.endswith(".yaml"):
+            file_path = os.path.join(PROMPT_DIR, filename)
+            with open(file_path, "r", encoding="utf-8") as f:
+                config = yaml.safe_load(f)
+                if config and "prompts" in config and isinstance(config["prompts"], list):
+                    combined_config["prompts"].extend(config["prompts"])
+                # master_system_prompt 같은 최상위 키도 병합
+                for key, value in config.items():
+                    if key != "prompts":
+                        combined_config[key] = value
 
-    with open(PROMPTS_FILE, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
+    if not combined_config["prompts"]:
+        raise FileNotFoundError(f"프롬프트 파일이 존재하지 않습니다: {PROMPT_DIR}")
+        
+    return combined_config
 
 def load_datasets() -> Dict[str, Any]:
     """
@@ -64,16 +76,26 @@ def get_prompt(prompt_name: str, **kwargs: Any) -> str:
     config = load_prompts_config()
     datasets = load_datasets()
 
-    prompt_config = config.get("prompt_templates", {}).get(prompt_name)
+    # 'prompts' 리스트에서 prompt_name에 맞는 설정을 찾습니다.
+    prompt_config = next((p for p in config.get("prompts", []) if p.get("name") == prompt_name), None)
 
     if not prompt_config:
         raise ValueError(f"'{prompt_name}'에 해당하는 프롬프트를 찾을 수 없습니다.")
 
-    template_string = prompt_config.get("template", "")
+    # 레벨에 따른 템플릿 선택
+    level = kwargs.get("level", "beginner") # 기본 레벨은 'beginner'
+    template_string = prompt_config.get("levels", {}).get(level)
+    
+    if not template_string:
+         # 레벨이 없는 경우, 최상위 템플릿 사용 (하위 호환성)
+        template_string = prompt_config.get("template", "")
+    
+    if not template_string:
+        raise ValueError(f"'{prompt_name}' 프롬프트의 '{level}' 레벨에 해당하는 템플릿을 찾을 수 없습니다.")
 
     # Jinja2 템플릿 렌더링
     template = Environment(loader=BaseLoader()).from_string(template_string)
-    
+
     # 템플릿에 전달할 전체 컨텍스트
     # kwargs가 우선순위를 갖도록 하여, 사용자가 직접 입력한 값으로 데이터셋 값을 덮어쓸 수 있게 함
     context = {
@@ -89,4 +111,4 @@ def get_system_prompt() -> str:
     시스템 프롬프트는 동적 데이터가 필요 없다고 가정합니다.
     """
     config = load_prompts_config()
-    return config.get("master_system_prompt", "") 
+    return config.get("master_system_prompt", "당신은 전문 작가를 돕는 AI 어시스턴트, Loop AI입니다.") 

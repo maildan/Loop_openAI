@@ -2,14 +2,13 @@
 	"name": "loop-ai-monorepo",
 	"private": true,
 	"scripts": {
-		"dev": "concurrently \"pnpm --filter frontend dev\" \"python3 run_server.py\""
+		"dev": "node start-dev.js"
 	},
 	"dependencies": {
 		"@radix-ui/react-tooltip": "^1.2.7"
 	},
 	"packageManager": "pnpm@10.12.3+sha512.467df2c586056165580ad6dfb54ceaad94c5a30f80893ebdec5a44c5aa73c205ae4a5bb9d5ed6bb84ea7c249ece786642bbb49d06a307df218d03da41c317417",
 	"devDependencies": {
-		"concurrently": "^8.2.2",
 		"@types/hast": "^3.0.4"
 	}
 }
