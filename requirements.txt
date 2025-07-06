@@ -4,7 +4,7 @@
 # 🚀 Core ML Framework
 torch>=2.1.0
 transformers>=4.35.0
-tokenizers>=0.15.0
+tokenizers==0.15.0 --only-binary :all:
 
 # 🎯 Fine-tuning & PEFT
 peft>=0.6.0
@@ -47,7 +47,6 @@ google-api-python-client>=2.95.0
 openai
 transformers>=4.35.0
 torch>=2.0.0
-tokenizers>=0.15.0
 
 # 데이터 처리
 pandas>=2.0.0
