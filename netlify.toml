@@ -1,26 +1,15 @@
 [build]
   base = "frontend"
   command = """
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y &&
-    source $HOME/.cargo/env &&
-    python -m ensurepip &&
-    pip install --upgrade pip &&
-    cd .. &&
-    pip install -r requirements.txt &&
-    npm install -g @mcp/cli &&
-    cd frontend &&
     pnpm install &&
     pnpm run build
   """
   publish = ".next"
 
 [build.environment]
-  PYTHON_VERSION = "3.8"
   NODE_VERSION = "18"
   NPM_VERSION = "10"
   PNPM_VERSION = "10.12.1"
-  RUSTUP_HOME = "/opt/buildhome/.rustup"
-  CARGO_HOME = "/opt/buildhome/.cargo"
   GIT_TERMINAL_PROMPT = "0"
   GIT_SSH_COMMAND = "ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no"
 
