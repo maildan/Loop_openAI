@@ -31,7 +31,7 @@ interface ChatResponse {
   continuationToken?: string // 계속하기를 위한 토큰
 }
 
-const backendUrl = process.env.BACKEND_URL || 'http://127.0.0.1:8080'
+const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8080'
 
 // Node.js의 ReadableStream을 Web API의 ReadableStream으로 변환하는 헬퍼 함수
 async function* nodeStreamToIterator(stream: NodeJS.ReadableStream) {

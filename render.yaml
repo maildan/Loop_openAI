@@ -48,6 +48,14 @@ services:
       pnpm install
       pnpm run build
       
+    # 환경 변수: 백엔드 서비스의 URL을 프론트엔드에 주입
+    envVars:
+      - key: NEXT_PUBLIC_BACKEND_URL
+        fromService:
+          type: web
+          name: loop-ai-backend
+          property: url
+      
     # 정적 파일 배포 경로
     publishPath: "frontend/out"
 
