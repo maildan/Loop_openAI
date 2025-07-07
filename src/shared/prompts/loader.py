@@ -20,35 +20,28 @@ DATASET_DIR = os.path.join(PROJECT_ROOT, "dataset")
 def load_prompts_config() -> Dict[str, Any]:
     """
     PROMPT_DIR에 있는 모든 .yml 파일을 로드하여 하나의 딕셔너리로 병합합니다.
-    YAML 파일은 딕셔너리 형태이거나 프롬프트 객체의 리스트 형태일 수 있습니다.
+    모든 YAML 파일은 'prompts' 키 아래에 프롬프트 리스트를 포함해야 합니다.
     """
     combined_config: Dict[str, Any] = {"prompts": []}
-    
+
     for filename in os.listdir(PROMPT_DIR):
         if filename.endswith(".yml") or filename.endswith(".yaml"):
             file_path = os.path.join(PROMPT_DIR, filename)
             with open(file_path, "r", encoding="utf-8") as f:
                 data = yaml.safe_load(f)
-
-                if isinstance(data, dict):
-                    # YAML이 딕셔너리인 경우
-                    if "prompts" in data and isinstance(data.get("prompts"), list):
-                        combined_config["prompts"].extend(data["prompts"])
-                    
-                    for key, value in data.items():
-                        if key != "prompts":
-                            combined_config[key] = value
-                elif isinstance(data, list):
-                    # YAML이 리스트인 경우 (story_prompts.yml 같은 경우)
-                    # 각 항목이 딕셔너리인지 확인하여 안전하게 추가
-                    for item in data:
-                        if isinstance(item, dict):
-                            combined_config["prompts"].append(item)
-                # 다른 데이터 타입은 무시
+                
+                # 모든 YAML 파일이 'prompts' 키를 가지고 있다고 가정하고 데이터를 로드합니다.
+                if isinstance(data, dict) and "prompts" in data:
+                    prompt_list = data.get("prompts")
+                    if isinstance(prompt_list, list):
+                        combined_config["prompts"].extend(prompt_list)
+                else:
+                    # 예상치 못한 형식의 파일에 대한 경고
+                    print(f"Warning: '{filename}' is not in the expected format (missing 'prompts' key) and will be skipped.")
 
     if not combined_config["prompts"]:
         raise FileNotFoundError(f"프롬프트 파일이 존재하지 않거나 유효한 프롬프트가 없습니다: {PROMPT_DIR}")
-        
+
     return combined_config
 
 def load_datasets() -> Dict[str, Any]:
@@ -91,6 +84,9 @@ def get_prompt(prompt_name: str, **kwargs: Any) -> str:
     prompt_config = next((p for p in config.get("prompts", []) if p.get("name") == prompt_name), None)
 
     if not prompt_config:
+        # 시스템 프롬프트 요청에 대한 예외 처리
+        if prompt_name == "system_prompt":
+            return get_system_prompt()
         raise ValueError(f"'{prompt_name}'에 해당하는 프롬프트를 찾을 수 없습니다.")
 
     # 레벨에 따른 템플릿 선택
@@ -118,8 +114,13 @@ def get_prompt(prompt_name: str, **kwargs: Any) -> str:
 
 def get_system_prompt() -> str:
     """
-    마스터 시스템 프롬프트만 반환합니다.
-    시스템 프롬프트는 동적 데이터가 필요 없다고 가정합니다.
+    'system_prompt'라는 이름의 프롬프트를 찾아 반환합니다.
     """
     config = load_prompts_config()
-    return config.get("master_system_prompt", "당신은 전문 작가를 돕는 AI 어시스턴트, Loop AI입니다.") 
+    system_prompt_config = next((p for p in config.get("prompts", []) if p.get("name") == "system_prompt"), None)
+    
+    if system_prompt_config and "template" in system_prompt_config:
+        return system_prompt_config["template"]
+    
+    # 대체 기본 프롬프트
+    return "당신은 전문 작가를 돕는 AI 어시스턴트, Loop AI입니다. 항상 작가의 창작 활동을 최대한 지원해주세요." 
