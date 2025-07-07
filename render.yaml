@@ -47,6 +47,8 @@ services:
       cd frontend
       pnpm install
       pnpm run build
+      echo "--- Printing build output ---"
+      ls -R out
       
     # 환경 변수: 백엔드 서비스의 URL을 프론트엔드에 주입
     envVars:
