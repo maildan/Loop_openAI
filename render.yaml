@@ -45,6 +45,8 @@ services:
       corepack enable
       corepack prepare pnpm@latest --activate
       cd frontend
+      # pnpm의 저장소 경로를 Render의 영구 캐시 디렉토리로 지정하여 빌드 속도 가속
+      pnpm config set store-dir /var/data/cache/pnpm-store
       pnpm install
       pnpm run build
       echo "--- Printing build output ---"
