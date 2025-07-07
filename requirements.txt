@@ -4,7 +4,7 @@
 # 🚀 Core ML Framework
 torch>=2.1.0
 transformers>=4.35.0
-tokenizers==0.15.0 --only-binary :all:
+tokenizers==0.15.2
 
 # 🎯 Fine-tuning & PEFT
 peft>=0.6.0

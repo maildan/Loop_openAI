@@ -1,6 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  /* config options here */
+  output: 'export',  // Enable static exports
+  images: {
+    unoptimized: true,  // Required for static export
+  },
 
   // 🔥 기가차드 Hot Reload 지옥 방지!
   webpack: (config, { dev }) => {
@@ -16,28 +19,7 @@ const nextConfig = {
     return config;
   },
 
-  rewrites: async () => {
-    return [
-      {
-        source: "/api/:path*",
-        destination: "http://localhost:8080/api/:path*",
-      },
-      {
-        source: "/docs",
-        destination:
-          process.env.NODE_ENV === "development"
-            ? "http://127.0.0.1:8000/api/docs"
-            : "/api/docs",
-      },
-      {
-        source: "/openapi.json",
-        destination:
-          process.env.NODE_ENV === "development"
-            ? "http://127.0.0.1:8000/api/openapi.json"
-            : "/api/openapi.json",
-      },
-    ];
-  },
+  // rewrites는 static export에서는 작동하지 않으므로 제거
 };
 
 module.exports = nextConfig; 
