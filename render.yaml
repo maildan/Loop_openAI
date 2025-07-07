@@ -1,0 +1,61 @@
+# Loop AI - GigaChad Edition Render Blueprint
+# ==============================================================================
+# Infrastructure as Code for fully-automated, optimized deployments on Render.
+# ------------------------------------------------------------------------------
+
+services:
+  # -------------------------------------
+  # 1. Backend API Server (FastAPI)
+  # -------------------------------------
+  - type: web
+    name: loop-ai-backend
+    runtime: python
+    region: oregon # 또는 가장 가까운 리전으로 변경 (e.g., frankfurt, singapore)
+    plan: standard # 필요에 따라 'pro' 또는 다른 플랜으로 변경
+    branch: main
+    
+    # 빌드 최적화
+    buildCommand: |
+      pip install --upgrade pip
+      pip install -r requirements.txt
+    
+    # 서비스 시작 명령어
+    startCommand: uvicorn src.inference.api.server:app --host 0.0.0.0 --port $PORT --workers 2
+
+    # 환경 변수: Render 대시보드에서 키 값을 설정해야 합니다.
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false # 대시보드에서 직접 입력하여 보안 유지
+      - key: PYTHON_VERSION
+        value: "3.11" # requirements.txt와 호환되는 Python 버전 명시
+
+    # 제로 다운타임 배포를 위한 상태 확인
+    healthCheckPath: /api/health
+
+  # -------------------------------------
+  # 2. Frontend Web App (Next.js)
+  # -------------------------------------
+  - type: static
+    name: loop-ai-frontend
+    region: oregon # 백엔드와 동일한 리전으로 설정
+    branch: main
+    
+    # 빌드 최적화 (pnpm 사용 및 캐싱 경로 지정)
+    buildCommand: |
+      corepack enable
+      corepack prepare pnpm@latest --activate
+      cd frontend
+      pnpm install
+      pnpm run build
+      
+    # 정적 파일 배포 경로
+    publishPath: "frontend/out"
+
+    # 모든 경로를 index.html로 리다이렉트하여 Next.js 라우팅 지원
+    rewriteRules:
+      - source: /_next/static/*
+        destination: /_next/static/*
+      - source: /favicon.ico
+        destination: /favicon.ico
+      - source: /*
+        destination: /index.html 
