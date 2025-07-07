@@ -541,34 +541,14 @@ async def get_spellcheck_stats() -> ModuleStats:
 @app.get("/api/health")
 async def health_check():
     """
-    서버의 상태를 확인하는 헬스 체크 엔드포인트입니다.
-    - OpenAI API 연결 상태 확인
-    - 핸들러 초기화 여부 확인
+    서버의 상태를 확인하는 경량화된 엔드포인트입니다.
+    외부 서비스 호출 없이 즉시 응답하여 서비스의 구동 여부만 빠르게 확인합니다.
     """
-    status = {"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()}
-    details = {}
-
-    # OpenAI 연결 상태 확인
-    if openai_client:
-        try:
-            _ = await openai_client.models.list(timeout=5)
-            details["openai_api"] = "connected"
-        except Exception as e:
-            details["openai_api"] = f"disconnected: {e}"
-            status["status"] = "error"
-    else:
-        details["openai_api"] = "not_initialized"
-        status["status"] = "error"
-
-    # 핸들러 초기화 확인
-    details["chat_handler"] = "initialized" if chat_handler else "not_initialized"
-    if not chat_handler:
-        status["status"] = "error"
-        
-    if status["status"] == "ok":
-        return status
-    else:
-        raise HTTPException(status_code=503, detail=details)
+    return {
+        "status": "ok",
+        "version": "3.0.0",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
 
 @app.post("/api/location-suggest", response_model=LocationSuggestResponse)
 async def suggest_locations(request: LocationSuggestRequest) -> LocationSuggestResponse:
