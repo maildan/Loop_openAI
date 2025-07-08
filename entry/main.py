@@ -21,6 +21,7 @@ def main() -> None:  # pragma: no cover
         port=int(os.getenv("PORT", "8080")),
         reload=is_dev,
         log_level="debug" if is_dev else "warning",
+        workers=os.cpu_count() or 1,
     )
 
 

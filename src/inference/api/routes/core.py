@@ -8,6 +8,9 @@ from datetime import datetime, timezone
 from typing import cast, TYPE_CHECKING
 
 from fastapi import APIRouter, FastAPI, Request
+import time
+import logging
+from fastapi.responses import JSONResponse
 
 from src.inference.api.schemas import CostStatusResponse
 # 서버 순환 참조 방지를 위해 서버 변수를 지연 import합니다.
@@ -27,11 +30,15 @@ async def root():
 @router.get("/api/health")
 async def health_check():
     """헬스 체크"""
-    return {
+    start = time.perf_counter()
+    data = {
         "status": "ok",
         "version": "3.0.0",
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
+    elapsed_ms = (time.perf_counter() - start) * 1000
+    logging.info(f"/api/health latency: {elapsed_ms:.2f}ms")
+    return JSONResponse(content=data, headers={"X-Response-Time": f"{elapsed_ms:.2f}ms"})
 
 
 @router.get("/healthz")
@@ -60,6 +67,7 @@ async def get_cost_status():
 @router.post("/api/clear_cache")
 async def clear_cache_endpoint(request: Request):
     """내부 캐시 초기화"""
+    start = time.perf_counter()
     app = cast(FastAPI, request.app)
     web_search_handler = cast("WebSearchHandler | None", getattr(app.state, "web_search_handler", None))
     if web_search_handler:
@@ -68,4 +76,6 @@ async def clear_cache_endpoint(request: Request):
     # 지연 import로 순환 참조 제거
     from src.inference.api.server import response_cache
     response_cache.cache.clear()
-    return {"status": "all caches cleared"} 
+    elapsed_ms = (time.perf_counter() - start) * 1000
+    logging.info(f"/api/clear_cache latency: {elapsed_ms:.2f}ms")
+    return JSONResponse(content={"status": "all caches cleared"}, headers={"X-Response-Time": f"{elapsed_ms:.2f}ms"}) 

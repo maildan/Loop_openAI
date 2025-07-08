@@ -94,3 +94,6 @@ websockets
 
 # 추가 의존성
 PyYAML
+
+# CSRF 보호
+fastapi-csrf-protect>=1.0.0

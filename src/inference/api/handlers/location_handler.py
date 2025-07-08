@@ -2,7 +2,7 @@ import os
 import logging
 from typing import cast, TypedDict  # safe type casting 및 TypedDict 정의
 
-import requests
+import httpx  # async HTTP client
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ class LocationHandler:
             self.enabled = True
             logger.info("🌐 Neutrino LocationHandler 초기화 완료!")
 
-    def suggest_locations(self, query: str, limit: int = 5) -> list[str]:
+    async def suggest_locations(self, query: str, limit: int = 5) -> list[str]:
         """사용자 쿼리에 대해 지역/도시명을 추천
 
         Args:
@@ -59,7 +59,8 @@ class LocationHandler:
                 "fuzzy-search": "true",
             }
 
-            response = requests.post(self.BASE_URL, data=payload, timeout=10)
+            async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=5.0)) as client:
+                response = await client.post(self.BASE_URL, data=payload)
             response.raise_for_status()
             # API 응답을 dict[str, object]로 캐스팅하여 Any 제거
             raw = cast(dict[str, object], response.json())
@@ -88,5 +89,4 @@ class LocationHandler:
 
         except Exception as e:
             logger.error(f"❌ Neutrino 위치 추천 오류: {e}")
-            # 오류를 호출자에게 전달하여 FastAPI에서 적절한 HTTPException으로 처리할 수 있게 함
             raise

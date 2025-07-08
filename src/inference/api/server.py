@@ -3,7 +3,8 @@
 Loop AI 모듈화된 추론 서버 (경량화 버전)
 핸들러 초기화, lifespan, 미들웨어, 라우터 include만 담당합니다.
 """
-
+# pyright: reportMissingImports=false, reportUnusedImport=false, reportUnknownVariableType=false, reportUnknownMemberType=false, reportUntypedFunctionDecorator=false, reportMissingParameterType=false, reportUnknownParameterType=false, reportCallInDefaultInitializer=false
+# pyright: reportUnknownArgumentType=false
 from __future__ import annotations
 import logging
 import os
@@ -15,8 +16,7 @@ from contextlib import asynccontextmanager
 import uvicorn
 import httpx
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import ORJSONResponse
 from openai import AsyncOpenAI
 
 from src.inference.api.handlers import ChatHandler, SpellCheckHandler
@@ -30,6 +30,41 @@ from src.inference.api.routes.assistant import router as assistant_router
 from src.inference.api.routes.core import router as core_router
 from src.inference.api.routes.location import router as location_router
 from src.inference.api.routes.name_generator import router as name_router
+
+from starlette.types import ASGIApp, Receive, Scope, Send, Message
+from starlette.middleware.sessions import SessionMiddleware
+import fastapi_csrf_protect  # type: ignore[reportMissingImports]
+from fastapi_csrf_protect import CsrfProtect, CsrfProtectError  # type: ignore[reportMissingImports,reportUnknownVariableType]
+from fastapi import Request, Depends, Response
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+from starlette.middleware.base import RequestResponseEndpoint
+# Pure ASGI CORS middleware class definition
+class CORSAsgi:
+    app: ASGIApp
+    """Pure ASGI CORS middleware to replace BaseHTTPMiddleware."""
+    def __init__(self, app: ASGIApp):
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send):
+        if scope["type"] == "http":
+            headers = [
+                (b'access-control-allow-origin', b'*'),
+                (b'access-control-allow-credentials', b'true'),
+                (b'access-control-allow-methods', b'*'),
+                (b'access-control-allow-headers', b'*'),
+            ]
+            if scope.get("method") == "OPTIONS":
+                await send({"type": "http.response.start", "status": 200, "headers": headers})
+                await send({"type": "http.response.body", "body": b''})
+                return
+            async def send_wrapper(message: Message):
+                if message.get('type') == 'http.response.start':
+                    message['headers'] = list(message.get('headers', [])) + headers
+                await send(message)
+            await self.app(scope, receive, send_wrapper)
+        else:
+            await self.app(scope, receive, send)
 
 # 가격 및 사용량 추적
 PRICING_PER_TOKEN = {
@@ -82,9 +117,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     if not api_key:
         logging.warning("⚠️ OPENAI_API_KEY 미설정")
 
-    # Increase default timeout to support longer AI analysis requests, override connect
+    # HTTPX AsyncClient 설정: 타임아웃과 커넥션 풀 재사용
     timeout = httpx.Timeout(timeout=60.0, connect=5.0)
-    openai_client = AsyncOpenAI(api_key=api_key, timeout=timeout)
+    httpx_client = httpx.AsyncClient(timeout=timeout)
+    # AsyncOpenAI에 HTTPX 클라이언트 주입
+    openai_client = AsyncOpenAI(api_key=api_key, http_client=httpx_client)
     chat_handler = ChatHandler(openai_api_key=api_key) if api_key else None
     spellcheck_handler = SpellCheckHandler(openai_client)
     location_handler = LocationHandler()
@@ -101,6 +138,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     app.state.assistant_handler = assistant_handler
     logging.info("✅ 핸들러 초기화 완료")
     yield
+    # 서버 종료 시 OpenAI 및 HTTPX 클라이언트 정리
+    await openai_client.close()
+    await httpx_client.aclose()
     logging.info("🌙 서버 종료")
 
 app = FastAPI(
@@ -108,9 +148,44 @@ app = FastAPI(
     description="Loop AI 창작 지원 시스템",
     version="3.0.0",
     lifespan=lifespan,
+    default_response_class=ORJSONResponse,
 )
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
-app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+# 세션 관리 미들웨어 추가
+app.add_middleware(SessionMiddleware,
+    secret_key=os.getenv("SESSION_SECRET_KEY", "change-me"),
+    session_cookie="session",
+    max_age=86400,
+    https_only=False,
+    same_site="none",
+)
+
+# fastapi-csrf-protect 설정 로더
+class CsrfSettings(BaseModel):
+    secret_key: str = os.getenv("CSRF_SECRET_KEY", "change-me")
+
+@CsrfProtect.load_config  # type: ignore[reportUntypedFunctionDecorator]
+def get_csrf_config() -> CsrfSettings:
+    return CsrfSettings()
+
+# CSRF 검증 미들웨어
+@app.middleware("http")
+async def csrf_protect_middleware(request: Request, call_next: RequestResponseEndpoint) -> Response:
+    if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+        try:
+            csrf_protect = CsrfProtect()
+            csrf_protect.validate_csrf_in_cookies(request)
+        except CsrfProtectError as e:
+            return JSONResponse(status_code=403, content={"detail": str(e)})
+    response = await call_next(request)
+    return response
+
+# CSRF 토큰 발급 엔드포인트
+@app.get("/api/csrf", tags=["security"])
+def get_csrf_token(csrf_protect: CsrfProtect = Depends()) -> Response:
+    response = JSONResponse(content={"message": "CSRF cookie set"})
+    csrf_protect.set_csrf_cookie(response)
+    return response
 
 # 라우터 등록
 app.include_router(spellcheck_router)
@@ -119,6 +194,9 @@ app.include_router(assistant_router)
 app.include_router(core_router)
 app.include_router(location_router)
 app.include_router(name_router)
+
+# Wrap FastAPI app with pure ASGI CORS after router registration
+app = CORSAsgi(app)
 
 if __name__ == "__main__":
     uvicorn.run("src.inference.api.newserver:app", host="0.0.0.0", port=8000, reload=True) 

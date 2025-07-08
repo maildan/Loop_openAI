@@ -22,7 +22,7 @@ async def suggest_locations(request_body: LocationSuggestRequest, request: Reque
     if not location_handler.enabled:
         raise HTTPException(status_code=503, detail="Location handler disabled. Please configure NEUTRINO_USER_ID and NEUTRINO_API_KEY environment variables.")
     try:
-        suggestions = location_handler.suggest_locations(request_body.query)
+        suggestions = await location_handler.suggest_locations(request_body.query)
         return LocationSuggestResponse(suggestions=suggestions)
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"Location suggestion service error: {exc}") 

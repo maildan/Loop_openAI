@@ -9,7 +9,8 @@ WORKDIR /app
 COPY . /app
 
 # Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements-core.txt
+RUN pip install --no-cache-dir uvloop httptools
 
 # Expose application port
 
