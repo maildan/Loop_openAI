@@ -18,10 +18,12 @@ def main() -> None:  # pragma: no cover
     env = os.getenv("NODE_ENV", "production")
     is_dev = env == "development"
 
+    # 프로덕션에서는 고정 포트 8080, 개발에서는 환경변수 PORT 사용
+    run_port = int(os.getenv("PORT", "8080")) if is_dev else 8080
     uvicorn.run(
         "src.inference.api.server:app",
         host="0.0.0.0",
-        port=int(os.getenv("PORT", "8080")),
+        port=run_port,
         reload=is_dev,
         log_level="debug" if is_dev else "warning",
         workers=os.cpu_count() or 1,
