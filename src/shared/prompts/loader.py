@@ -56,8 +56,7 @@ def load_datasets() -> dict[str, object]:
     """
     datasets: dict[str, object] = {}
     if not os.path.isdir(DATASET_DIR):
-        # 데이터셋 디렉토리가 없는 경우 경고를 출력하고 빈 딕셔너리를 반환할 수 있습니다.
-        print(f"Warning: Dataset directory not found at {DATASET_DIR}")
+        # Dataset directory not found; skipping without warning
         return datasets
 
     for filename in os.listdir(DATASET_DIR):

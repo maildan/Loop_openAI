@@ -116,7 +116,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # HTTPX AsyncClient 설정: 타임아웃과 커넥션 풀 재사용
     timeout = httpx.Timeout(timeout=60.0, connect=5.0)
-    httpx_client = httpx.AsyncClient(timeout=timeout)
+    httpx_client = httpx.AsyncClient(timeout=timeout, trust_env=False)
     # AsyncOpenAI에 HTTPX 클라이언트 주입
     openai_client = AsyncOpenAI(api_key=api_key, http_client=httpx_client)
     chat_handler = ChatHandler(openai_api_key=api_key) if api_key else None
@@ -164,6 +164,10 @@ app.include_router(assistant_router)
 app.include_router(core_router)
 app.include_router(location_router)
 app.include_router(name_router)
+# Electron 환경일 때 Prisma DB 조회 라우터 등록
+if os.getenv("ELECTRON", "false").lower() == "true":
+    from src.inference.api.routes.db import router as db_router
+    app.include_router(db_router)
 
 # Wrap FastAPI app with pure ASGI CORS after router registration
 app = CORSAsgi(app)

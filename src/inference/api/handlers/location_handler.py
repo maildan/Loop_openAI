@@ -61,7 +61,8 @@ class LocationHandler:
 
             async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=5.0)) as client:
                 response = await client.post(self.BASE_URL, data=payload)
-            response.raise_for_status()
+            # 상태 코드 확인 후 예외 발생 여부 체크
+            _ = response.raise_for_status()
             # API 응답을 dict[str, object]로 캐스팅하여 Any 제거
             raw = cast(dict[str, object], response.json())
             # TypedDict으로 캐스팅: dict -> object -> TypedDict (Pyright 호환)
