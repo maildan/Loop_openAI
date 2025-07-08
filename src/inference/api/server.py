@@ -82,7 +82,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     if not api_key:
         logging.warning("⚠️ OPENAI_API_KEY 미설정")
 
-    timeout = httpx.Timeout(10.0, connect=5.0)
+    # Increase default timeout to support longer AI analysis requests, override connect
+    timeout = httpx.Timeout(timeout=60.0, connect=5.0)
     openai_client = AsyncOpenAI(api_key=api_key, timeout=timeout)
     chat_handler = ChatHandler(openai_api_key=api_key) if api_key else None
     spellcheck_handler = SpellCheckHandler(openai_client)
@@ -91,6 +92,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     assistant_handler = AssistantHandler(openai_client, web_search_handler)
 
     app.state.chat_handler = chat_handler
+    # Chat API 라우터 등록 (순환 참조 없이 핸들러 초기화 이후 등록)
+    if chat_handler:
+        app.include_router(chat_handler.router)
     app.state.spellcheck_handler = spellcheck_handler
     app.state.location_handler = location_handler
     app.state.web_search_handler = web_search_handler

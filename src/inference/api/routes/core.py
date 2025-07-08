@@ -10,7 +10,8 @@ from typing import cast, TYPE_CHECKING
 from fastapi import APIRouter, FastAPI, Request
 
 from src.inference.api.schemas import CostStatusResponse
-from src.inference.api.server import response_cache, MONTHLY_BUDGET, monthly_usage
+# 서버 순환 참조 방지를 위해 서버 변수를 지연 import합니다.
+# from src.inference.api.server import response_cache, MONTHLY_BUDGET, monthly_usage
 
 if TYPE_CHECKING:
     from src.inference.api.handlers.web_search_handler import WebSearchHandler
@@ -36,6 +37,8 @@ async def health_check():
 @router.get("/api/cost-status", response_model=CostStatusResponse)
 async def get_cost_status():
     """월별 비용 현황"""
+    # 지연 import로 순환 참조 제거
+    from src.inference.api.server import response_cache, MONTHLY_BUDGET, monthly_usage
     cost = monthly_usage["cost"]
     tokens = monthly_usage["tokens"]
     usage_percentage = (cost / MONTHLY_BUDGET) * 100 if MONTHLY_BUDGET > 0 else 0
@@ -57,5 +60,7 @@ async def clear_cache_endpoint(request: Request):
     if web_search_handler:
         _ = await web_search_handler.clear_cache()
 
+    # 지연 import로 순환 참조 제거
+    from src.inference.api.server import response_cache
     response_cache.cache.clear()
     return {"status": "all caches cleared"} 

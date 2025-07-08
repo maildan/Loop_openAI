@@ -6,17 +6,21 @@ Node.js 의 `index.ts`/`main.ts` 와 동일한 책임을 수행합니다.
 """
 from __future__ import annotations
 
+import os
 import uvicorn
 
 
 def main() -> None:  # pragma: no cover
     """FastAPI 앱을 실행하는 메인 함수."""
+    env = os.getenv("NODE_ENV", "production")
+    is_dev = env == "development"
+
     uvicorn.run(
         "src.inference.api.server:app",
         host="0.0.0.0",
-        port=8080,
-        reload=True,
-        log_level="info",
+        port=int(os.getenv("PORT", "8080")),
+        reload=is_dev,
+        log_level="debug" if is_dev else "warning",
     )
 
 

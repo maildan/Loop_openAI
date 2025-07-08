@@ -236,7 +236,8 @@ class SpellCheckHandler:
             response: SpellcheckApiResponse = {
                 "success": True,
                 "original_text": text,
-                "corrected_text": check_result["corrected"] if auto_correct else text,
+                # corrected may be empty string; fallback to original text
+                "corrected_text": (check_result["corrected"] if auto_correct and check_result["corrected"] else text),
                 "errors_found": len(check_result["errors"]),
                 "error_words": check_result["errors"],
                 "suggestions": check_result["suggestions"],

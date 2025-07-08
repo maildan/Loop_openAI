@@ -11,20 +11,18 @@ def load_prompts_from_file() -> dict[str, dict[str, str]]:
     파일이 없거나 오류 발생 시 대체 프롬프트를 반환합니다.
     """
     try:
-        # 이 파일의 위치를 기준으로 프로젝트 루트를 찾고 story_prompts.yml 경로를 구성합니다.
-        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+        # 프로젝트 루트는 src/utils에서 세 단계 상위 디렉토리로 이동하여 loop_ai 디렉토리입니다.
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         file_path = os.path.join(base_dir, PROMPTS_FILE_PATH)
         
         with open(file_path, 'r', encoding='utf-8') as f:
-            # YAML 파일의 최상위 키가 'prompts' 이므로 해당 리스트를 가져옵니다.
-            loaded = yaml.safe_load(f)
-            data = cast(dict[str, object], loaded if isinstance(loaded, dict) else {})
+            data = cast(dict[str, object], yaml.safe_load(f) or {})
             raw_prompts = data.get('prompts', [])
-            prompts_list = cast(list[dict[str, str]], raw_prompts if isinstance(raw_prompts, list) else [])
+            prompts_list: list[dict[str, str]] = cast(list[dict[str, str]], raw_prompts) if isinstance(raw_prompts, list) else []
             prompts: dict[str, dict[str, str]] = {}
             for p in prompts_list:
-                if isinstance(p, dict) and 'name' in p:
-                    prompts[p['name']] = p  # type: ignore[index]
+                if 'name' in p:
+                    prompts[p['name']] = p
 
         if not prompts:
             print(f"⚠️ 경고: {PROMPTS_FILE_PATH} 파일이 비어있거나 'prompts' 키를 찾을 수 없습니다. 대체 프롬프트를 사용합니다.")

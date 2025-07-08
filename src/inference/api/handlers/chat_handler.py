@@ -12,18 +12,8 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from ....utils.prompt_loader import get_prompt as _raw_get_prompt
-from collections.abc import Callable
-from typing import cast
-
-# 원본 get_prompt의 타입을 명확히 단언하여 Pyright Unknown 경고 제거
-_get_prompt: Callable[..., str] = cast(Callable[..., str], _raw_get_prompt)
-
-
-def get_prompt(key: str, **kwargs: object) -> str:
-    """타입 안정성을 유지하면서 원본 get_prompt를 호출"""
-
-    return _get_prompt(key, **kwargs)  # type: ignore[arg-type]
+# 프롬프트 로더를 Jinja2 기반 shared loader로 변경
+from src.shared.prompts.loader import get_prompt
 
 class ChatRequest(BaseModel):
     """
@@ -35,6 +25,11 @@ class ChatRequest(BaseModel):
         max_length=1000,
         description="사용자가 입력한 메시지 또는 스토리 생성 요청",
         examples=["우주를 여행하는 고양이에 대한 이야기를 써줘"]
+    )
+    max_tokens: int | None = Field(
+        None,
+        ge=50,
+        description="응답에 사용할 최대 토큰 수. 지정하지 않으면 800, 최대 128000으로 제한",
     )
 
 class ChatHandler:
@@ -57,7 +52,8 @@ class ChatHandler:
 
     async def _get_intent(self, user_message: str) -> str:
         """사용자 메시지로부터 의도를 분류합니다."""
-        prompt = get_prompt('intent_classification', user_message=user_message)
+        # prompt key corrected to 'intent_classifier'
+        prompt = get_prompt('intent_classifier', user_message=user_message)
         if not prompt:
             return "story_generation"  # Fallback
 
@@ -81,10 +77,10 @@ class ChatHandler:
     async def _stream_static_message(self, message_key: str):
         """정적인 메시지를 SSE 형식으로 스트리밍합니다."""
         message = get_prompt(message_key)
-        content_json = json.dumps({"type": "message", "content": message})
+        content_json = json.dumps({"type": "message", "content": message}, ensure_ascii=False)
         yield f"data: {content_json}\n\n"
         
-        end_stream_json = json.dumps({"type": "end", "reason": "completed"})
+        end_stream_json = json.dumps({"type": "end", "reason": "completed"}, ensure_ascii=False)
         yield f"data: {end_stream_json}\n\n"
 
     async def _stream_story(self, user_message: str):
@@ -106,15 +102,15 @@ class ChatHandler:
             async for chunk in stream:
                 content = chunk.choices[0].delta.content
                 if content:
-                    content_json = json.dumps({"type": "chunk", "content": content})
+                    content_json = json.dumps({"type": "chunk", "content": content}, ensure_ascii=False)
                     yield f"data: {content_json}\n\n"
             
-            end_stream_json = json.dumps({"type": "end", "reason": "completed"})
+            end_stream_json = json.dumps({"type": "end", "reason": "completed"}, ensure_ascii=False)
             yield f"data: {end_stream_json}\n\n"
 
         except Exception as e:
             error_message = f"API 호출 중 오류 발생: {str(e)}"
-            error_json = json.dumps({"type": "error", "content": error_message})
+            error_json = json.dumps({"type": "error", "content": error_message}, ensure_ascii=False)
             yield f"data: {error_json}\n\n"
 
     async def handle_chat(self, request: ChatRequest):
@@ -130,8 +126,17 @@ class ChatHandler:
                 self._stream_static_message('greeting_response'),
                 media_type="text/event-stream"
             )
-        
-        return StreamingResponse(
-            self._stream_story(user_message),
-            media_type="text/event-stream"
-        )
+        # Non-streaming full story response
+        try:
+            prompt = get_prompt('story_generation', user_message=user_message)
+            response = await self.client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.7,
+                max_tokens=min(request.max_tokens or 800, 128000),
+                stream=False,
+            )
+            story = response.choices[0].message.content or ""
+            return {"content": story}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"스토리 생성 중 오류: {e}")

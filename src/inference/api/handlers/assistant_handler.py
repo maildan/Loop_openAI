@@ -163,14 +163,11 @@ class AssistantHandler:
 
             # validate and assign template and persona
             template_obj = prompt_template_data.get("template")
+            if not isinstance(template_obj, str):
+                raise ValueError("smart_sentence_improvement 프롬프트 데이터를 찾을 수 없습니다.")
             persona_obj = prompt_template_data.get("persona")
-            if not isinstance(template_obj, str) or not isinstance(persona_obj, str):
-                raise ValueError("smart_sentence_improvement 프롬프트 데이터 형식이 잘못되었습니다.")
             prompt_template: str = template_obj
-            persona: str = persona_obj
-
-            if not prompt_template or not persona:
-                raise ValueError("smart_sentence_improvement 프롬프트에 'template' 또는 'persona'가 없습니다.")
+            persona: str = persona_obj if isinstance(persona_obj, str) else template_obj
 
             prompt_content: str = prompt_template.format(user_message=original_text)
             
@@ -686,6 +683,7 @@ class AssistantHandler:
                 genre=genre,
                 synopsis=synopsis,
                 keywords=", ".join(keywords),
+                platform=platform,
                 web_search_data=search_data,
             )
             selected_model = model or "gpt-4o"

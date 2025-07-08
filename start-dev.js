@@ -11,12 +11,23 @@ function runScript(command, args, name) {
 console.log('🔥 GigaChad Dev Server is starting...');
 console.log('Starting backend server...');
 
-const backend = runScript('./venv/bin/python', ['run_server.py'], 'BACKEND');
+// 개발 모드 환경 변수 설정 (NODE_ENV)
+const env = { ...process.env, NODE_ENV: 'development' };
 
-function cleanup() {
+const backend = spawn('./venv/bin/python', ['run_server.py'], {
+    stdio: 'inherit',
+    shell: true,
+    env,
+});
+
+backend.on('close', (code) => {
+    console.log(`[BACKEND] process exited with code ${code}`);
+});
+
+function runCleanup() {
     console.log('Shutting down server...');
     backend.kill();
 }
 
-process.on('SIGINT', cleanup);
-process.on('SIGTERM', cleanup); 
+process.on('SIGINT', runCleanup);
+process.on('SIGTERM', runCleanup); 

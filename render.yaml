@@ -4,29 +4,22 @@
 # ------------------------------------------------------------------------------
 
 services:
-  # -------------------------------------
-  # 1. Backend API Server (FastAPI)
-  # -------------------------------------
   - type: web
     name: loop-ai-backend
-    env: python
+    env: docker
     plan: free
-    healthCheckPath: /api/health
-    buildCommand: |
-      pip install --upgrade pip
-      pip install -r requirements.txt
-    startCommand: uvicorn src.inference.api.server:app --host 0.0.0.0 --port $PORT --workers 1
+    dockerfilePath: ./Dockerfile
     envVars:
-      - key: PYTHON_VERSION
-        value: 3.11.9
       - key: OPENAI_API_KEY
-        fromSecret: OPENAI_API_KEY_LOOP
-      - key: TAVILY_API_KEY
-        fromSecret: TAVILY_API_KEY_LOOP
-      - key: GOOGLE_API_KEY
-        fromSecret: GOOGLE_API_KEY_LOOP
-      - key: GOOGLE_CSE_ID
-        fromSecret: GOOGLE_CSE_ID_LOOP
+      - key: KEY_TAG
+      - key: NEUTRINO_USER_ID
+      - key: KEY
+      - key: NEUTRINO_API_KEY
+      - key: REDIS_URL
+        value: ""
+    healthCheckPath: "/api/health"
+    autoDeploy: true
+    branch: main
 
   # -------------------------------------
   # 2. Frontend Web App (Next.js)

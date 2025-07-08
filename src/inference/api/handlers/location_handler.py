@@ -88,4 +88,5 @@ class LocationHandler:
 
         except Exception as e:
             logger.error(f"❌ Neutrino 위치 추천 오류: {e}")
-            return []
+            # 오류를 호출자에게 전달하여 FastAPI에서 적절한 HTTPException으로 처리할 수 있게 함
+            raise
