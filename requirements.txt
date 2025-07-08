@@ -96,4 +96,4 @@ websockets
 PyYAML
 
 # CSRF 보호
-fastapi-csrf-protect>=1.0.0
+fastapi-csrf-protect>=0.1.5
