@@ -34,6 +34,11 @@ async def health_check():
     }
 
 
+@router.get("/healthz")
+async def healthz():
+    return await health_check()
+
+
 @router.get("/api/cost-status", response_model=CostStatusResponse)
 async def get_cost_status():
     """월별 비용 현황"""
