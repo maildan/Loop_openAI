@@ -986,6 +986,273 @@ setTimeout(() => {
 }, 300000);
 ```
 
+## 판타지 이름 생성 API 예제
+
+### 단일 이름 생성
+
+```javascript
+// 기본 이세계 스타일 여성 이름 생성
+async function generateIsekaiFemaleCharacterName() {
+  const response = await fetch('http://localhost:8000/api/generate-name', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      style: 'isekai',
+      gender: 'female'
+    })
+  });
+  
+  const data = await response.json();
+  console.log(`생성된 이름: ${data.name}`);
+}
+
+// 서양 판타지 스타일 남성 이름 생성
+async function generateWesternMaleCharacterName() {
+  const response = await fetch('http://localhost:8000/api/generate-name', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      style: 'western',
+      gender: 'male'
+    })
+  });
+  
+  const data = await response.json();
+  console.log(`생성된 이름: ${data.name}`);
+}
+
+// 마법사 클래스 이름 생성
+async function generateMageCharacterName() {
+  const response = await fetch('http://localhost:8000/api/generate-name', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      character_class: '마법사',
+      gender: 'female'
+    })
+  });
+  
+  const data = await response.json();
+  console.log(`생성된 마법사 이름: ${data.name}`);
+}
+
+// 불 속성 캐릭터 이름 생성
+async function generateFireElementCharacterName() {
+  const response = await fetch('http://localhost:8000/api/generate-name', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      element: '불',
+      gender: 'male'
+    })
+  });
+  
+  const data = await response.json();
+  console.log(`생성된 불 속성 이름: ${data.name}`);
+}
+```
+
+### 다중 이름 생성
+
+```javascript
+// 다양한 스타일의 여성 캐릭터 이름 5개 생성
+async function generateMultipleCharacterNames() {
+  const response = await fetch('http://localhost:8000/api/generate-multiple-names', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      count: 5,
+      gender: 'female',
+      style: 'mixed'
+    })
+  });
+  
+  const data = await response.json();
+  console.log('생성된 캐릭터 이름들:');
+  data.names.forEach(character => {
+    console.log(`- ${character.name} (${character.style}, ${character.personality})`);
+  });
+}
+```
+
+### Python 예제
+
+```python
+import requests
+
+# 단일 이름 생성
+def generate_single_name():
+    url = "http://localhost:8000/api/generate-name"
+    payload = {
+        "style": "noble",
+        "gender": "female"
+    }
+    
+    response = requests.post(url, json=payload)
+    
+    if response.status_code == 200:
+        data = response.json()
+        print(f"생성된 귀족 이름: {data['name']}")
+    else:
+        print(f"에러: {response.status_code}")
+
+# 다중 이름 생성
+def generate_multiple_names():
+    url = "http://localhost:8000/api/generate-multiple-names"
+    payload = {
+        "count": 3,
+        "gender": "male",
+        "style": "western"
+    }
+    
+    response = requests.post(url, json=payload)
+    
+    if response.status_code == 200:
+        data = response.json()
+        print("생성된 서양 판타지 남성 이름들:")
+        for character in data["names"]:
+            print(f"- {character['name']} ({character['personality']})")
+    else:
+        print(f"에러: {response.status_code}")
+
+# 카테고리별 배치 이름 생성
+def generate_batch_names():
+    url = "http://localhost:8000/api/batch-generate-names"
+    payload = {
+        "count_per_category": 2
+    }
+    
+    response = requests.post(url, json=payload)
+    
+    if response.status_code == 200:
+        data = response.json()
+        
+        print("\n이세계 이름:")
+        for item in data["isekai_names"]:
+            print(f"- {item['name']} ({item['origin']})")
+            
+        print("\n서양 판타지 이름:")
+        for item in data["western_fantasy_names"]:
+            print(f"- {item['name']} ({item['origin']})")
+            
+        print("\n귀족 가문:")
+        for item in data["noble_families"]:
+            print(f"- {item['family_name']} 가문")
+            print(f"  - 영주: {item['lord']}")
+            print(f"  - 영부인: {item['lady']}")
+    else:
+        print(f"에러: {response.status_code}")
+
+# 함수 실행
+if __name__ == "__main__":
+    generate_single_name()
+    generate_multiple_names()
+    generate_batch_names()
+```
+
+### 실제 사용 예시
+
+```javascript
+// React 컴포넌트에서 사용 예시
+import React, { useState } from 'react';
+
+function FantasyNameGenerator() {
+  const [name, setName] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [style, setStyle] = useState('isekai');
+  const [gender, setGender] = useState('female');
+  const [characterClass, setCharacterClass] = useState('');
+  const [element, setElement] = useState('');
+  
+  const generateName = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch('http://localhost:8000/api/generate-name', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          style,
+          gender,
+          character_class: characterClass || undefined,
+          element: element || undefined
+        })
+      });
+      
+      const data = await response.json();
+      setName(data.name);
+    } catch (error) {
+      console.error('이름 생성 실패:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  return (
+    <div className="fantasy-name-generator">
+      <h2>판타지 이름 생성기</h2>
+      
+      <div className="controls">
+        <div>
+          <label>스타일:</label>
+          <select value={style} onChange={(e) => setStyle(e.target.value)}>
+            <option value="isekai">이세계 애니메이션</option>
+            <option value="western">서양 판타지</option>
+            <option value="composed">조합형</option>
+            <option value="noble">귀족</option>
+          </select>
+        </div>
+        
+        <div>
+          <label>성별:</label>
+          <select value={gender} onChange={(e) => setGender(e.target.value)}>
+            <option value="female">여성</option>
+            <option value="male">남성</option>
+          </select>
+        </div>
+        
+        <div>
+          <label>클래스:</label>
+          <select value={characterClass} onChange={(e) => setCharacterClass(e.target.value)}>
+            <option value="">선택 안함</option>
+            <option value="마법사">마법사</option>
+            <option value="기사">기사</option>
+            <option value="도적">도적</option>
+            <option value="성직자">성직자</option>
+            <option value="용사">용사</option>
+          </select>
+        </div>
+        
+        <div>
+          <label>원소/속성:</label>
+          <select value={element} onChange={(e) => setElement(e.target.value)}>
+            <option value="">선택 안함</option>
+            <option value="불">불</option>
+            <option value="물">물</option>
+            <option value="바람">바람</option>
+            <option value="대지">대지</option>
+            <option value="빛">빛</option>
+            <option value="어둠">어둠</option>
+          </select>
+        </div>
+        
+        <button onClick={generateName} disabled={loading}>
+          {loading ? '생성 중...' : '이름 생성'}
+        </button>
+      </div>
+      
+      {name && (
+        <div className="result">
+          <h3>생성된 이름:</h3>
+          <div className="name">{name}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default FantasyNameGenerator;
+```
+
 ---
 
 이 예제들은 Loop AI API의 모든 기능을 실제 상황에서 활용하는 방법을 보여줍니다. 각 예제는 독립적으로 실행할 수 있으며, 필요에 따라 조합하여 더 복잡한 애플리케이션을 구축할 수 있습니다.

@@ -5,18 +5,33 @@ Loop AI 글쓰기 지원 기능 핸들러
 """
 import logging
 import re
-from typing import Any
+from typing import cast
 
 from openai import AsyncOpenAI
 
-from src.shared.prompts.loader import get_prompt
+from src.shared.prompts.loader import get_prompt, load_prompts_config
 from .web_search_handler import WebSearchHandler
+from ..shared_types import (
+    ImproveSentenceResult,
+    SmartSentenceImprovementResult,
+    PlotHoleDetectionResult,
+    CharacterConsistencyResult,
+    CliffhangerSuggestion,
+    CliffhangerGenerationResult,
+    ReaderResponseResult,
+    EpisodeLengthResult,
+    BetaReadResult,
+    TrendAnalysisResult
+)
 
 logger = logging.getLogger(__name__)
 
 
 class AssistantHandler:
     """글쓰기 지원 도구를 관리하는 핸들러"""
+
+    client: AsyncOpenAI | None  # 명시적 클래스 속성 타입 애노테이션
+    web_search_handler: WebSearchHandler | None  # 명시적 클래스 속성 타입 애노테이션
 
     def __init__(self, openai_client: AsyncOpenAI | None = None, web_search_handler: WebSearchHandler | None = None):
         """
@@ -36,7 +51,7 @@ class AssistantHandler:
         character_profile: str,
         context: str,
         model: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> ImproveSentenceResult:
         """
         AI를 사용하여 문장을 3가지 버전으로 개선합니다.
         1. 더 생생한 묘사
@@ -123,7 +138,7 @@ class AssistantHandler:
         self,
         original_text: str,
         model: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> SmartSentenceImprovementResult:
         """
         AI를 사용하여 문장을 개선하고 여러 대안을 제시합니다.
         새로운 smart_sentence_improvement 프롬프트를 사용합니다.
@@ -133,17 +148,31 @@ class AssistantHandler:
             raise ValueError("OpenAI client is not initialized")
 
         try:
-            prompt_template_data = get_prompt("smart_sentence_improvement")
-            if not prompt_template_data or not isinstance(prompt_template_data, dict):
-                raise ValueError("smart_sentence_improvement 템플릿을 찾을 수 없거나 형식이 잘못되었습니다.")
+            # load prompts configuration and cast to object-keyed dict
+            prompts_config = cast(dict[str, object], load_prompts_config())
+            raw_prompts = prompts_config.get("prompts")
+            prompts_list: list[dict[str, object]] = cast(list[dict[str, object]], raw_prompts) if isinstance(raw_prompts, list) else []
+            # default empty template data for fallback
+            default_pt_data: dict[str, object] = {}
+            prompt_template_data: dict[str, object] = next(
+                (p for p in prompts_list if p.get("name") == "smart_sentence_improvement"),
+                default_pt_data
+            )
+            if not prompt_template_data:
+                raise ValueError("smart_sentence_improvement 프롬프트 데이터를 찾을 수 없습니다.")
 
-            prompt_template = prompt_template_data.get('template')
-            persona = prompt_template_data.get('persona')
+            # validate and assign template and persona
+            template_obj = prompt_template_data.get("template")
+            persona_obj = prompt_template_data.get("persona")
+            if not isinstance(template_obj, str) or not isinstance(persona_obj, str):
+                raise ValueError("smart_sentence_improvement 프롬프트 데이터 형식이 잘못되었습니다.")
+            prompt_template: str = template_obj
+            persona: str = persona_obj
 
             if not prompt_template or not persona:
                 raise ValueError("smart_sentence_improvement 프롬프트에 'template' 또는 'persona'가 없습니다.")
 
-            prompt_content = prompt_template.format(user_message=original_text)
+            prompt_content: str = prompt_template.format(user_message=original_text)
             
             selected_model = model or "gpt-4o-mini"
 
@@ -180,7 +209,7 @@ class AssistantHandler:
         self,
         full_story_text: str,
         model: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> PlotHoleDetectionResult:
         """
         AI를 사용하여 이야기의 플롯 홀을 감지합니다.
         """
@@ -233,7 +262,7 @@ class AssistantHandler:
         other_settings: str,
         story_text_for_analysis: str,
         model: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> CharacterConsistencyResult:
         """
         AI를 사용하여 캐릭터의 일관성을 검증합니다.
         """
@@ -288,7 +317,7 @@ class AssistantHandler:
         genre: str,
         scene_context: str,
         model: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> CliffhangerGenerationResult:
         """
         AI를 사용하여 주어진 장르와 장면에 맞는 클리프행어를 생성합니다.
         """
@@ -334,11 +363,12 @@ class AssistantHandler:
             logger.error(f"❌ 클리프행어 생성 중 오류 발생: {e}")
             raise
 
-    def _parse_cliffhanger_suggestions(self, content: str) -> list[dict[str, str]]:
+    def _parse_cliffhanger_suggestions(self, content: str) -> list[CliffhangerSuggestion]:
         """
-        클리프행어 생성 결과를 파싱하여 구조화된 데이터로 반환합니다.
+        AI 응답에서 클리프행어 제안들을 파싱합니다.
+        - 제안: ...
         """
-        suggestions = []
+        suggestions: list[CliffhangerSuggestion] = []  # annotated list for Pyright
         # '타입'을 기준으로 섹션을 나눔
         sections = re.split(r'###\s*타입\s*\d+:', content)
         
@@ -368,7 +398,7 @@ class AssistantHandler:
         platform: str,
         scene_context: str,
         model: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> ReaderResponseResult:
         """
         AI를 사용하여 특정 장면에 대한 독자 반응을 예측합니다.
         """
@@ -396,7 +426,7 @@ class AssistantHandler:
                 raise ValueError("API 응답이 비어있습니다.")
 
             # 결과 파싱 (향후 더 정교한 파싱 로직 추가 가능)
-            parsed_report = self._parse_reader_response(content)
+            parsed_response = self._parse_reader_response(content)
 
             prompt_tokens = api_response.usage.prompt_tokens if api_response.usage else 0
             completion_tokens = api_response.usage.completion_tokens if api_response.usage else 0
@@ -404,7 +434,7 @@ class AssistantHandler:
             cost = total_tokens * (0.005 / 1000)
 
             return {
-                "prediction_report": parsed_report,
+                "prediction_report": parsed_response,
                 "model": selected_model,
                 "cost": cost,
                 "tokens": total_tokens,
@@ -414,7 +444,7 @@ class AssistantHandler:
             logger.error(f"❌ 독자 반응 예측 중 오류 발생: {e}")
             raise
 
-    def _parse_reader_response(self, content: str) -> dict[str, Any]:
+    def _parse_reader_response(self, content: str) -> dict[str, str | float]:
         """독자 반응 예측 결과를 파싱합니다."""
         try:
             # 각 섹션별로 내용을 추출
@@ -440,7 +470,7 @@ class AssistantHandler:
         episode_text: str,
         platform: str,
         model: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> EpisodeLengthResult:
         """
         AI를 사용하여 웹소설 에피소드의 길이를 최적화하고 분할 지점을 제안합니다.
         """
@@ -473,10 +503,10 @@ class AssistantHandler:
             cost = total_tokens * (0.005 / 1000) # gpt-4o 기준 단순 계산
 
             # 파싱 로직 추가
-            optimization_result = self._parse_optimization_result(content)
+            parsed_report = self._parse_optimization_result(content)
 
             return {
-                "optimization_report": optimization_result,
+                "optimization_report": parsed_report,
                 "model": selected_model,
                 "cost": cost,
                 "tokens": total_tokens,
@@ -486,12 +516,12 @@ class AssistantHandler:
             logger.error(f"❌ 에피소드 길이 최적화 중 오류 발생: {e}")
             raise
 
-    def _parse_optimization_result(self, content: str) -> dict[str, Any]:
+    def _parse_optimization_result(self, content: str) -> dict[str, object]:
         """에피소드 길이 최적화 결과를 파싱합니다."""
         try:
             recommendation_match = re.search(r"\*\*Overall Recommendation:\*\*\n(.*?)(?=\n\*\*Detailed Split Points:\*\*|\Z)", content, re.DOTALL)
             
-            split_points = []
+            split_points: list[dict[str, object]] = []  # annotated for Pyright
             # Detailed Split Points 섹션 전체를 가져옴
             split_points_section_match = re.search(r"\*\*Detailed Split Points:\*\*(.*?)(\*\*Monetization Tip:\*\*|\Z)", content, re.DOTALL)
             if split_points_section_match:
@@ -523,7 +553,7 @@ class AssistantHandler:
         target_audience: str,
         author_concerns: str | None = None,
         model: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> BetaReadResult:
         """
         AI 베타리더를 통해 원고에 대한 종합적인 피드백을 받습니다.
         """
@@ -561,10 +591,10 @@ class AssistantHandler:
             cost = total_tokens * (0.005 / 1000)
 
             # 파싱 로직 추가
-            feedback_report = self._parse_beta_read_report(content)
+            parsed_report = self._parse_beta_read_report(content)
 
             return {
-                "beta_read_report": feedback_report,
+                "beta_read_report": parsed_report,
                 "model": selected_model,
                 "cost": cost,
                 "tokens": total_tokens,
@@ -574,10 +604,10 @@ class AssistantHandler:
             logger.error(f"❌ AI 베타리딩 중 오류 발생: {e}")
             raise
 
-    def _parse_beta_read_report(self, content: str) -> dict[str, Any]:
+    def _parse_beta_read_report(self, content: str) -> dict[str, object]:
         """AI 베타리더의 리포트를 파싱합니다."""
         try:
-            report: dict[str, Any] = {"raw_text": content}
+            report: dict[str, object] = {"raw_text": content}  # annotated for Pyright
             
             # Executive Summary 파싱
             summary_match = re.search(r"\*\*Executive Summary \(Overall Score: (\d+)/100\)\*\*\n(.*?)(?=\n---\n|\Z)", content, re.DOTALL)
@@ -623,7 +653,7 @@ class AssistantHandler:
         keywords: list[str],
         platform: str,
         model: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> TrendAnalysisResult:
         """
         웹 검색을 통해 최신 트렌드를 분석하고, 작가의 작품에 적용할 아이디어를 제안합니다.
         """

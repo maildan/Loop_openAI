@@ -4,7 +4,7 @@ Loop AI 맞춤법 검사 핸들러
 """
 
 import logging
-from typing import TypedDict
+from typing import TypedDict, cast
 import sys
 import os
 from openai import AsyncOpenAI
@@ -65,6 +65,12 @@ class SpellcheckApiResponse(TypedDict, total=False):
     reason: str
     context_analysis: str
 
+
+# TypedDict for AI 기반 문맥 교정 결과
+class AICorrectionResult(TypedDict, total=False):
+    corrected_text: str
+    reason: str
+    context_analysis: str
 
 class SpellCheckHandler:
     """맞춤법 검사 및 문체 제안 핸들러"""
@@ -321,17 +327,24 @@ class SpellCheckHandler:
             )
 
             if response.choices[0].message.content:
-                ai_result = json.loads(response.choices[0].message.content)
+                # JSON -> dict[str, object] -> TypedDict로 캐스팅
+                ai_raw = cast(dict[str, object], json.loads(response.choices[0].message.content))
+                ai_result = cast(AICorrectionResult, cast(object, ai_raw))
 
-                # 로컬 맞춤법 검사기 통계와 결합
-                local_check = self.check_text(ai_result.get("corrected_text", target_text))
+                # 키 존재 여부 검사 후 값 획득 (TypedDict 안정성 확보)
+                corrected = ai_result["corrected_text"] if "corrected_text" in ai_result else target_text
+                reason = ai_result["reason"] if "reason" in ai_result else "AI가 제공한 이유 없음"
+                context_analysis = ai_result["context_analysis"] if "context_analysis" in ai_result else "AI가 제공한 분석 없음"
+
+                # 로컬 맞춤법 검사 실행
+                local_check = self.check_text(corrected)
 
                 final_result: SpellcheckApiResponse = {
                     "success": True,
                     "original_text": target_text,
-                    "corrected_text": ai_result.get("corrected_text", target_text),
-                    "reason": ai_result.get("reason", "AI가 제공한 이유 없음"),
-                    "context_analysis": ai_result.get("context_analysis", "AI가 제공한 분석 없음"),
+                    "corrected_text": corrected,
+                    "reason": reason,
+                    "context_analysis": context_analysis,
                     "errors_found": len(local_check["errors"]),
                     "error_words": local_check["errors"],
                     "accuracy": local_check["stats"]["accuracy"],

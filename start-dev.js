@@ -9,14 +9,12 @@ function runScript(command, args, name) {
 }
 
 console.log('🔥 GigaChad Dev Server is starting...');
-console.log('Starting frontend and backend servers...');
+console.log('Starting backend server...');
 
-const frontend = runScript('pnpm', ['--filter', 'frontend', 'dev'], 'FRONTEND');
 const backend = runScript('./venv/bin/python', ['run_server.py'], 'BACKEND');
 
 function cleanup() {
-    console.log('Shutting down servers...');
-    frontend.kill();
+    console.log('Shutting down server...');
     backend.kill();
 }
 

@@ -1,16 +1,20 @@
+# pyright: reportMissingTypeStubs=false, reportUnknownMemberType=false, reportExplicitAny=false
 """
 문체 분석 유틸리티
 - soynlp를 이용한 키워드 추출
 - 기본 텍스트 통계 계산
 """
 import logging
-from soynlp.noun import LRNounExtractor_v2
-from soynlp.tokenizer import LTokenizer
+from soynlp.noun import LRNounExtractor_v2  # type: ignore[reportMissingTypeStubs]
+from soynlp.tokenizer import LTokenizer  # type: ignore[reportMissingTypeStubs]
+from typing import cast
 
 logger = logging.getLogger(__name__)
 
 class StyleAnalyzer:
     """텍스트의 스타일과 구조를 분석하는 클래스"""
+    noun_extractor: LRNounExtractor_v2 | None
+    tokenizer: LTokenizer | None
 
     def __init__(self):
         self.noun_extractor = None
@@ -25,12 +29,12 @@ class StyleAnalyzer:
             
         # 명사 추출기 훈련
         self.noun_extractor = LRNounExtractor_v2(verbose=False)
-        self.noun_extractor.train(texts)
+        self.noun_extractor.train(texts)  # type: ignore[attr-defined]
         
         # 토크나이저 훈련
         if self.noun_extractor:
-            nouns = self.noun_extractor.train_extract(texts)
-            self.tokenizer = LTokenizer(scores=nouns)
+            nouns: dict[str, object] = cast(dict[str, object], self.noun_extractor.train_extract(texts))  # type: ignore[attr-defined]
+            self.tokenizer = LTokenizer(scores=nouns)  # type: ignore
 
     def get_basic_stats(self, text: str) -> dict[str, float | int]:
         """텍스트의 기본적인 통계 정보를 반환"""
@@ -61,11 +65,9 @@ class StyleAnalyzer:
             self._train_models([text])
             if not self.noun_extractor:
                 return []
-                
-            nouns = self.noun_extractor.train_extract([text])
-            
+            nouns: dict[str, object] = cast(dict[str, object], self.noun_extractor.train_extract([text]))  # type: ignore[attr-defined]
             # min_count 이상 출현한 명사만 키워드로 간주
-            keywords = [noun for noun, score in nouns.items() if text.count(noun) >= min_count]
+            keywords = [noun for noun in nouns.keys() if text.count(noun) >= min_count]
             return keywords
             
         except Exception as e:

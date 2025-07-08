@@ -64,29 +64,29 @@ Loop AI의 Assistant API는 단순한 텍스트 생성을 넘어, 작가의 창�
 **스마트 문장 개선**: 단일 문장 또는 짧은 단락을 분석하여 문체, 리듬, 명확성 측면에서 여러 개선안을 제안합니다.
 
 -   **Request Body**: `SmartSentenceImprovementRequest`
-    ```json
-    {
+```json
+{
       "original_text": "기사가 매우 용감하게 앞으로 가서 용을 때렸다.",
       "model": "gpt-4o-mini"
-    }
-    ```
+}
+```
 -   **Response Body**: `SmartSentenceImprovementResponse`
-    ```json
-    {
+```json
+{
       "improvement_suggestions": "1. **\"기사는 용을 향해 용맹하게 돌진했다.\"**\n * **이유:** '돌진했다'는 표현이 '앞으로 갔다'보다 훨씬 더 역동적이고 긴박한 느낌을 줍니다...\n2. ...",
       "model": "gpt-4o-mini",
       "cost": 0.00012,
       "tokens": 800
-    }
-    ```
+}
+```
 
 ### `POST /analyze/plot-holes`
 
 **실시간 플롯 홀 감지**: 이야기 전체 텍스트를 분석하여 플롯 홀, 설정 충돌 등을 감지합니다.
 
 -   **Request Body**: `PlotHoleDetectionRequest`
-    ```json
-    {
+```json
+{
       "full_story_text": "1화에서 철수는 17살이었다. ... 3화에서 철수는 갑자기 19살이 되어 수능을 봤다.",
       "model": "gpt-4o"
     }
@@ -123,16 +123,16 @@ Loop AI의 Assistant API는 단순한 텍스트 생성을 넘어, 작가의 창�
       "model": "gpt-4o",
       "cost": 0.0028,
       "tokens": 1800
-    }
-    ```
+}
+```
 
 ### `POST /analyze/beta-read`
 
 **AI 베타리더 종합 분석**: 원고 전체를 다각도로 분석하여 종합적인 피드백 리포트를 제공합니다.
 
 -   **Request Body**: `BetaReadRequest`
-    ```json
-    {
+```json
+{
       "manuscript": "[...원고 전문...]",
       "genre": "회귀, 헌터",
       "target_audience": "20-30대 남성",
@@ -146,8 +146,8 @@ Loop AI의 Assistant API는 단순한 텍스트 생성을 넘어, 작가의 창�
       "model": "gpt-4o",
       "cost": 0.015,
       "tokens": 8000
-    }
-    ```
+}
+```
 
 ### `POST /analyze/trends`
 
@@ -160,8 +160,8 @@ Loop AI의 Assistant API는 단순한 텍스트 생성을 넘어, 작가의 창�
       "synopsis": "검사가 세상 멸망을 막기 위해 과거로 돌아가는 이야기",
       "keywords": ["회귀", "검사", "멸망"],
       "platform": "카카오페이지"
-    }
-    ```
+}
+```
 -   **Response Body**: `TrendAnalysisResponse`
     ```json
     {
@@ -170,16 +170,16 @@ Loop AI의 Assistant API는 단순한 텍스트 생성을 넘어, 작가의 창�
       "cost": 0.004,
       "tokens": 2500,
       "searched_data": [ { "title": "요즘 유행하는 웹소설 키워드", "url": "...", "snippet": "..." } ]
-    }
-    ```
+}
+```
 
 ### `POST /generate/cliffhanger`
 
 **지능형 클리프행어 생성기**: 장르와 장면 맥락에 맞는 클리프행어 아이디어를 독자 반응 예측과 함께 제안합니다.
 
 -   **Request Body**: `CliffhangerRequest`
-    ```json
-    {
+```json
+{
       "genre": "로맨스 판타지",
       "scene_context": "남주인공이 여주인공에게 드디어 고백하고, 여주인공이 대답하려는 순간이다."
     }
@@ -194,7 +194,7 @@ Loop AI의 Assistant API는 단순한 텍스트 생성을 넘어, 작가의 창�
       "cost": 0.001,
       "tokens": 700
     }
-    ```
+```
 
 ### `POST /predict/reader-response`
 

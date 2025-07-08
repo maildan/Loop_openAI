@@ -1,16 +1,28 @@
 import os
 import logging
-from typing import List
+from typing import cast, TypedDict  # safe type casting 및 TypedDict 정의
 
 import requests
 
 logger = logging.getLogger(__name__)
 
+# TypedDict definitions for Neutrino API
+class NeutrinoLocation(TypedDict, total=False):
+    city: str
+    state: str
+    country: str
+    address: str
+
+class NeutrinoResponse(TypedDict):
+    locations: list[NeutrinoLocation]
+
 
 class LocationHandler:
     """Neutrino API를 이용한 지역·도시명 추천 핸들러"""
-
-    BASE_URL = "https://neutrinoapi.net/geocode-address"
+    BASE_URL: str = "https://neutrinoapi.net/geocode-address"
+    user_id: str | None  # from environment
+    api_key: str | None   # from environment
+    enabled: bool         # handler 활성화 여부
 
     def __init__(self):
         # 환경변수에서 자격증명 읽기
@@ -26,7 +38,7 @@ class LocationHandler:
             self.enabled = True
             logger.info("🌐 Neutrino LocationHandler 초기화 완료!")
 
-    def suggest_locations(self, query: str, limit: int = 5) -> List[str]:
+    def suggest_locations(self, query: str, limit: int = 5) -> list[str]:
         """사용자 쿼리에 대해 지역/도시명을 추천
 
         Args:
@@ -49,17 +61,22 @@ class LocationHandler:
 
             response = requests.post(self.BASE_URL, data=payload, timeout=10)
             response.raise_for_status()
-            data = response.json()
+            # API 응답을 dict[str, object]로 캐스팅하여 Any 제거
+            raw = cast(dict[str, object], response.json())
+            # TypedDict으로 캐스팅: dict -> object -> TypedDict (Pyright 호환)
+            data = cast(NeutrinoResponse, cast(object, raw))
 
-            locations = data.get("locations", [])
-            results = []
-            for loc in locations:
+            locs = data.get("locations", [])
+            # NeutrinoLocation 형식으로 캐스팅
+            locations_list: list[NeutrinoLocation] = [item for item in locs]
+            results: list[str] = []
+            for loc in locations_list:
                 # 도시, 국가, 주소 등을 조합하여 가독성 있는 문자열 생성
-                parts = []
+                parts: list[str] = []
                 for key in ["city", "state", "country", "address"]:
-                    value = loc.get(key)
-                    if value and value not in parts:
-                        parts.append(value)
+                    val = loc.get(key)
+                    if isinstance(val, str) and val not in parts:
+                        parts.append(val)
                 label = ", ".join(parts)
                 if label and label not in results:
                     results.append(label)
