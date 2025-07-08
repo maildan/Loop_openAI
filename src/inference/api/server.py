@@ -33,12 +33,7 @@ from src.inference.api.routes.name_generator import router as name_router
 
 from starlette.types import ASGIApp, Receive, Scope, Send, Message
 from starlette.middleware.sessions import SessionMiddleware
-import fastapi_csrf_protect  # type: ignore[reportMissingImports]
-from fastapi_csrf_protect import CsrfProtect, CsrfProtectError  # type: ignore[reportMissingImports,reportUnknownVariableType]
-from fastapi import Request, Depends, Response
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from starlette.middleware.base import RequestResponseEndpoint
 # Pure ASGI CORS middleware class definition
 class CORSAsgi:
     app: ASGIApp
@@ -159,33 +154,6 @@ app.add_middleware(SessionMiddleware,
     https_only=False,
     same_site="none",
 )
-
-# fastapi-csrf-protect 설정 로더
-class CsrfSettings(BaseModel):
-    secret_key: str = os.getenv("CSRF_SECRET_KEY", "change-me")
-
-@CsrfProtect.load_config  # type: ignore[reportUntypedFunctionDecorator]
-def get_csrf_config() -> CsrfSettings:
-    return CsrfSettings()
-
-# CSRF 검증 미들웨어
-@app.middleware("http")
-async def csrf_protect_middleware(request: Request, call_next: RequestResponseEndpoint) -> Response:
-    if request.method in ("POST", "PUT", "PATCH", "DELETE"):
-        try:
-            csrf_protect = CsrfProtect()
-            csrf_protect.validate_csrf_in_cookies(request)
-        except CsrfProtectError as e:
-            return JSONResponse(status_code=403, content={"detail": str(e)})
-    response = await call_next(request)
-    return response
-
-# CSRF 토큰 발급 엔드포인트
-@app.get("/api/csrf", tags=["security"])
-def get_csrf_token(csrf_protect: CsrfProtect = Depends()) -> Response:
-    response = JSONResponse(content={"message": "CSRF cookie set"})
-    csrf_protect.set_csrf_cookie(response)
-    return response
 
 # 라우터 등록
 app.include_router(spellcheck_router)
