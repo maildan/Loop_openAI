@@ -6,6 +6,9 @@ Node.js 의 `index.ts`/`main.ts` 와 동일한 책임을 수행합니다.
 """
 from __future__ import annotations
 
+import warnings
+warnings.filterwarnings("ignore", category=SyntaxWarning)
+
 import os
 import uvicorn
 

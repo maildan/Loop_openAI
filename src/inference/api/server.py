@@ -199,4 +199,4 @@ app.include_router(name_router)
 app = CORSAsgi(app)
 
 if __name__ == "__main__":
-    uvicorn.run("src.inference.api.newserver:app", host="0.0.0.0", port=8000, reload=True) 
+    uvicorn.run("src.inference.api.server:app", host="0.0.0.0", port=8000, reload=True) 
