@@ -6,6 +6,8 @@ Loop AI 모듈화된 추론 서버 (경량화 버전)
 # pyright: reportMissingImports=false, reportUnusedImport=false, reportUnknownVariableType=false, reportUnknownMemberType=false, reportUntypedFunctionDecorator=false, reportMissingParameterType=false, reportUnknownParameterType=false, reportCallInDefaultInitializer=false
 # pyright: reportUnknownArgumentType=false
 from __future__ import annotations
+import warnings
+warnings.filterwarnings("ignore", category=SyntaxWarning)
 import logging
 import os
 from collections import OrderedDict

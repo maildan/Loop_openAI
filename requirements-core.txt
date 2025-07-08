@@ -8,3 +8,4 @@ redis>=4.0.0
 beautifulsoup4>=4.9.3
 git+https://github.com/ssut/py-hanspell.git#egg=py-hanspell
 fastapi-csrf-protect>=0.1.5 
+orjson>=3.8.0 
