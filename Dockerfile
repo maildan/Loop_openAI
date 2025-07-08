@@ -1,5 +1,6 @@
 # Use official Python image
 FROM python:3.10-slim
+EXPOSE 8080
 
 # Set working directory
 WORKDIR /app
@@ -11,7 +12,7 @@ COPY . /app
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Expose application port
-EXPOSE 8080
+
 
 # Start the server
 CMD ["python", "run_server.py"] 
