@@ -13,6 +13,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from typing import cast
 from openai.types.chat.chat_completion_message_param import ChatCompletionMessageParam
+from openai import RateLimitError
 
 # 타입 안전성을 위해 핸들러 타입을 가져옵니다
 from src.inference.api.handlers.spellcheck_handler import SpellCheckHandler
@@ -128,131 +129,134 @@ class ChatHandler:
         """
         # 사용자 입력 및 사용자 식별
         user_message = chat_request.message.strip()
-        client = request.client
-        user_id = request.headers.get("X-User-Id") or (client.host if client else "anonymous")
-        # FastAPI 앱 타입 캐스트로 state 접근
-        from fastapi import FastAPI
-        app_instance = cast(FastAPI, request.app)
-        # 1. 이름 생성 기능 분기
-        import re
-        if "이름" in user_message:
-            # 개수, 성별, 스타일 추출
-            count_match = re.search(r"(\d+)개", user_message)
-            count = int(count_match.group(1)) if count_match else 5
-            gender = "female" if "여자" in user_message else ("male" if "남자" in user_message else None)
-            style = "fantasy" if "판타지" in user_message else None
-            from src.utils.name_generator import generate_multiple_names
-            result = {"names": generate_multiple_names(count=count, gender=gender, style=style)}
-            # 자연스러운 후속 대화 생성
-            system_msg = get_prompt("system_prompt")
-            messages = [
-                {"role": "system", "content": system_msg},
-                {"role": "assistant", "content": json.dumps(result, ensure_ascii=False)},
-                {"role": "user", "content": "위 결과를 바탕으로 자연스럽게 대화를 이어가주세요."},
-            ]
-            # messages를 적절한 타입으로 캐스트
-            response = await self.client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=cast(list[ChatCompletionMessageParam], messages),
-                temperature=0.7,
-                stream=False,
-                user=user_id,
-            )
-            reply = response.choices[0].message.content or ""
-            return {"result": result, "reply": reply}
-        # 2. 맞춤법 검사 분기
-        if "맞춤법" in user_message:
-            # state를 통해 핸들러 가져오기
-            spellcheck = cast(SpellCheckHandler, app_instance.state.spellcheck_handler)
-            result = spellcheck.check_text(user_message)
-            payload = {"original": result["original"], "corrected": result["corrected"]}
-            # 자연스러운 후속 대화 생성
-            system_msg = get_prompt("system_prompt")
-            messages = [
-                {"role": "system", "content": system_msg},
-                {"role": "assistant", "content": json.dumps(payload, ensure_ascii=False)},
-                {"role": "user", "content": "맞춤법 검사 결과를 바탕으로 간단히 코멘트 부탁해요."},
-            ]
-            # messages를 적절한 타입으로 캐스트
-            response = await self.client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=cast(list[ChatCompletionMessageParam], messages),
-                temperature=0.7,
-                stream=False,
-                user=user_id,
-            )
-            reply = response.choices[0].message.content or ""
-            return {"result": payload, "reply": reply}
-        # 3. 위치 추천 분기
-        if any(k in user_message for k in ["위치", "장소"]):
-            count_match = re.search(r"(\d+)개", user_message)
-            limit = int(count_match.group(1)) if count_match else 5
-            # state를 통해 핸들러 가져오기
-            location = cast(LocationHandler, app_instance.state.location_handler)
-            suggestions = await location.suggest_locations(user_message, limit)
-            payload = {"suggestions": suggestions}
-            # 자연스러운 후속 대화 생성
-            system_msg = get_prompt("system_prompt")
-            messages = [
-                {"role": "system", "content": system_msg},
-                {"role": "assistant", "content": json.dumps(payload, ensure_ascii=False)},
-                {"role": "user", "content": "추천된 위치에 대해 간단히 설명해줘."},
-            ]
-            # messages를 적절한 타입으로 캐스트
-            response = await self.client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=cast(list[ChatCompletionMessageParam], messages),
-                temperature=0.7,
-                stream=False,
-                user=user_id,
-            )
-            reply = response.choices[0].message.content or ""
-            return {"result": payload, "reply": reply}
-        # 4. 웹 검색 분기
-        if "검색" in user_message or "알려줘" in user_message:
-            count_match = re.search(r"(\d+)개", user_message)
-            num = int(count_match.group(1)) if count_match else 5
-            # state를 통해 핸들러 가져오기
-            websearch = cast(WebSearchHandler, app_instance.state.web_search_handler)
-            _, results = await websearch.search(user_message, num_results=num, include_summary=False)
-            payload = {"results": results}
-            # 자연스러운 후속 대화 생성
-            system_msg = get_prompt("system_prompt")
-            messages = [
-                {"role": "system", "content": system_msg},
-                {"role": "assistant", "content": json.dumps(payload, ensure_ascii=False)},
-                {"role": "user", "content": "검색 결과를 요약해서 알려줘."},
-            ]
-            # messages를 적절한 타입으로 캐스트
-            response = await self.client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=cast(list[ChatCompletionMessageParam], messages),
-                temperature=0.7,
-                stream=False,
-                user=user_id,
-            )
-            reply = response.choices[0].message.content or ""
-            return {"result": payload, "reply": reply}
-        # 기존 의도 분기
-        intent = await self._get_intent(user_message)
-
-        if intent == "greeting":
-            return StreamingResponse(
-                self._stream_static_message('greeting_response'),
-                media_type="text/event-stream"
-            )
-        # Non-streaming full story response
         try:
+            client = request.client
+            user_id = request.headers.get("X-User-Id") or (client.host if client else "anonymous")
+            # FastAPI 앱 타입 캐스트로 state 접근
+            from fastapi import FastAPI
+            app_instance = cast(FastAPI, request.app)
+            # 1. 이름 생성 기능 분기
+            import re
+            if "이름" in user_message:
+                # 개수, 성별, 스타일 추출
+                count_match = re.search(r"(\d+)개", user_message)
+                count = int(count_match.group(1)) if count_match else 5
+                gender = "female" if "여자" in user_message else ("male" if "남자" in user_message else None)
+                style = "fantasy" if "판타지" in user_message else None
+                from src.utils.name_generator import generate_multiple_names
+                result = {"names": generate_multiple_names(count=count, gender=gender, style=style)}
+                # 자연스러운 후속 대화 생성
+                system_msg = get_prompt("system_prompt")
+                messages = [
+                    {"role": "system", "content": system_msg},
+                    {"role": "assistant", "content": json.dumps(result, ensure_ascii=False)},
+                    {"role": "user", "content": "위 결과를 바탕으로 자연스럽게 대화를 이어가주세요."},
+                ]
+                # messages를 적절한 타입으로 캐스트
+                response = await self.client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=cast(list[ChatCompletionMessageParam], messages),
+                    temperature=0.7,
+                    stream=False,
+                    user=user_id,
+                )
+                reply = response.choices[0].message.content or ""
+                return {"result": result, "reply": reply}
+            # 2. 맞춤법 검사 분기
+            if "맞춤법" in user_message:
+                # state를 통해 핸들러 가져오기
+                spellcheck = cast(SpellCheckHandler, app_instance.state.spellcheck_handler)
+                result = spellcheck.check_text(user_message)
+                payload = {"original": result["original"], "corrected": result["corrected"]}
+                # 자연스러운 후속 대화 생성
+                system_msg = get_prompt("system_prompt")
+                messages = [
+                    {"role": "system", "content": system_msg},
+                    {"role": "assistant", "content": json.dumps(payload, ensure_ascii=False)},
+                    {"role": "user", "content": "맞춤법 검사 결과를 바탕으로 간단히 코멘트 부탁해요."},
+                ]
+                # messages를 적절한 타입으로 캐스트
+                response = await self.client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=cast(list[ChatCompletionMessageParam], messages),
+                    temperature=0.7,
+                    stream=False,
+                    user=user_id,
+                )
+                reply = response.choices[0].message.content or ""
+                return {"result": payload, "reply": reply}
+            # 3. 위치 추천 분기
+            if any(k in user_message for k in ["위치", "장소"]):
+                count_match = re.search(r"(\d+)개", user_message)
+                limit = int(count_match.group(1)) if count_match else 5
+                # state를 통해 핸들러 가져오기
+                location = cast(LocationHandler, app_instance.state.location_handler)
+                suggestions = await location.suggest_locations(user_message, limit)
+                payload = {"suggestions": suggestions}
+                # 자연스러운 후속 대화 생성
+                system_msg = get_prompt("system_prompt")
+                messages = [
+                    {"role": "system", "content": system_msg},
+                    {"role": "assistant", "content": json.dumps(payload, ensure_ascii=False)},
+                    {"role": "user", "content": "추천된 위치에 대해 간단히 설명해줘."},
+                ]
+                # messages를 적절한 타입으로 캐스트
+                response = await self.client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=cast(list[ChatCompletionMessageParam], messages),
+                    temperature=0.7,
+                    stream=False,
+                    user=user_id,
+                )
+                reply = response.choices[0].message.content or ""
+                return {"result": payload, "reply": reply}
+            # 4. 웹 검색 분기
+            if "검색" in user_message or "알려줘" in user_message:
+                count_match = re.search(r"(\d+)개", user_message)
+                num = int(count_match.group(1)) if count_match else 5
+                # state를 통해 핸들러 가져오기
+                websearch = cast(WebSearchHandler, app_instance.state.web_search_handler)
+                _, results = await websearch.search(user_message, num_results=num, include_summary=False)
+                payload = {"results": results}
+                # 자연스러운 후속 대화 생성
+                system_msg = get_prompt("system_prompt")
+                messages = [
+                    {"role": "system", "content": system_msg},
+                    {"role": "assistant", "content": json.dumps(payload, ensure_ascii=False)},
+                    {"role": "user", "content": "검색 결과를 요약해서 알려줘."},
+                ]
+                # messages를 적절한 타입으로 캐스트
+                response = await self.client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=cast(list[ChatCompletionMessageParam], messages),
+                    temperature=0.7,
+                    stream=False,
+                    user=user_id,
+                )
+                reply = response.choices[0].message.content or ""
+                return {"result": payload, "reply": reply}
+            # 기존 의도 분기
+            intent = await self._get_intent(user_message)
+
+            if intent == "greeting":
+                return StreamingResponse(
+                    self._stream_static_message('greeting_response'),
+                    media_type="text/event-stream"
+                )
+            # Non-streaming full story response
             prompt = get_prompt('story_generation', user_message=user_message)
             response = await self.client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=cast(list[ChatCompletionMessageParam], [{"role": "user", "content": prompt}]),
                 temperature=0.7,
-                max_tokens=min(chat_request.max_tokens or 800, 128000),
+                # 최대 토큰을 128000으로 설정하여 스토리가 중간에 잘리지 않도록 합니다
+                max_tokens=chat_request.max_tokens or 128000,
                 stream=False,
                 user=user_id,
             )
             story = response.choices[0].message.content or ""
             return {"content": story}
+        except RateLimitError:
+            raise HTTPException(status_code=429, detail="OpenAI 할당량을 초과했습니다. 사용량 및 결제 정보를 확인하세요.")
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"스토리 생성 중 오류: {e}")
