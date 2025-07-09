@@ -13,7 +13,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from typing import cast
 from openai.types.chat.chat_completion_message_param import ChatCompletionMessageParam
-from openai import RateLimitError
+from openai import RateLimitError, BadRequestError
 
 # 타입 안전성을 위해 핸들러 타입을 가져옵니다
 from src.inference.api.handlers.spellcheck_handler import SpellCheckHandler
@@ -245,15 +245,29 @@ class ChatHandler:
                 )
             # Non-streaming full story response
             prompt = get_prompt('story_generation', user_message=user_message)
-            response = await self.client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=cast(list[ChatCompletionMessageParam], [{"role": "user", "content": prompt}]),
-                temperature=0.7,
-                # 최대 토큰을 128000으로 설정하여 스토리가 중간에 잘리지 않도록 합니다
-                max_tokens=chat_request.max_tokens or 128000,
-                stream=False,
-                user=user_id,
-            )
+            try:
+                response = await self.client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=cast(list[ChatCompletionMessageParam], [{"role": "user", "content": prompt}]),
+                    temperature=0.7,
+                    # 최대 토큰을 모델 지원 최대값(16384)으로 제한하여 에러 방지
+                    max_tokens=min(chat_request.max_tokens or 16384, 16384),
+                    stream=False,
+                    user=user_id,
+                )
+            except BadRequestError as e:
+                if 'max_tokens is too large' in str(e):
+                    # 모델 최대값으로 재시도
+                    response = await self.client.chat.completions.create(
+                        model="gpt-4o-mini",
+                        messages=cast(list[ChatCompletionMessageParam], [{"role": "user", "content": prompt}]),
+                        temperature=0.7,
+                        max_tokens=16384,
+                        stream=False,
+                        user=user_id,
+                    )
+                else:
+                    raise HTTPException(status_code=400, detail=f"스토리 생성 요청 오류: {e}")
             story = response.choices[0].message.content or ""
             return {"content": story}
         except RateLimitError:
