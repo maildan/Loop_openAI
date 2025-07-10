@@ -20,13 +20,15 @@ def main() -> None:  # pragma: no cover
 
     # 모든 환경에서 Render 할당 포트를 사용
     port = int(os.getenv("PORT", "8080"))
+    # 개발 모드에서는 워커를 1로 고정하여 리로드가 즉시 작동하게 함
+    worker_count = 1 if is_dev else (os.cpu_count() or 1)
     uvicorn.run(
         "src.inference.api.server:app",
         host="0.0.0.0",
         port=port,
         reload=is_dev,
         log_level="debug" if is_dev else "warning",
-        workers=os.cpu_count() or 1,
+        workers=worker_count,
     )
 
 
