@@ -1,0 +1,35 @@
+%% Loop_AI 백엔드(src) 아키텍처 - 가로형
+%% Mermaid ver.
+graph LR;
+
+subgraph "API 레이어 (FastAPI)"
+    direction LR
+    Routes["라우터(routes)"] --> Handlers["핸들러(handlers)"] --> Schemas["스키마·타입"]
+end
+
+subgraph "유틸 · 서비스"
+    direction LR
+    PromptLoader["프롬프트 로더"] --> Prompts["YAML 프롬프트"]
+    NameGen["이름 생성기"]
+    SpellcheckUtil["맞춤법 유틸"]
+    KoreanFilter["한국어 필터"]
+    StyleAnalyzer["스타일 분석기"]
+end
+
+Handlers --> PromptLoader
+Handlers --> NameGen
+Handlers --> SpellcheckUtil
+Handlers --> KoreanFilter
+Handlers --> StyleAnalyzer
+
+subgraph "파인튜닝 GPT"
+    direction LR
+    Inference["Inference 엔진"]
+end
+
+Handlers --> Inference
+
+subgraph "학습 파이프라인"
+    direction LR
+    TrainingScripts["학습 스크립트(training)"] --> Models["파인튜닝 모델"] -.->|"모델 업데이트"| Inference
+end

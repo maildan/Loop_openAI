@@ -3,13 +3,18 @@
 Loop AI 모듈화된 추론 서버 (경량화 버전)
 핸들러 초기화, lifespan, 미들웨어, 라우터 include만 담당합니다.
 """
+
+
 # pyright: reportMissingImports=false, reportUnusedImport=false, reportUnknownVariableType=false, reportUnknownMemberType=false, reportUntypedFunctionDecorator=false, reportMissingParameterType=false, reportUnknownParameterType=false, reportCallInDefaultInitializer=false
 # pyright: reportUnknownArgumentType=false
 from __future__ import annotations
+from dotenv import load_dotenv
+from openai import AsyncOpenAI
+import os
+
 import warnings
 warnings.filterwarnings("ignore", category=SyntaxWarning)
 import logging
-import os
 from collections import OrderedDict
 from typing import TypeVar, Generic
 from collections.abc import AsyncGenerator
@@ -136,7 +141,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logging.info("✅ 핸들러 초기화 완료")
     yield
     # 서버 종료 시 OpenAI 및 HTTPX 클라이언트 정리
-    await openai_client.close()
+    await openai_client.close()  # type: ignore
     await httpx_client.aclose()
     logging.info("🌙 서버 종료")
 

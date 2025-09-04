@@ -1,0 +1,25 @@
+graph LR;
+%% Renderer side
+subgraph "Renderer (Next.js)"
+    DashboardUI["Dashboard UI"]
+    StatsViewer["Stats Viewer\n(WPM 등)"]
+end
+
+%% Main Process side
+subgraph "Main Process (Electron)"
+    IPCChannel["IPC Channel Layer"]
+    UnifiedHandler["UnifiedHandler.ts\n(Facade 역할)"]
+    WindowTracker["WindowTracker.ts"]
+    KeyboardEngine["KeyboardEngine.ts"]
+    DBManager["DB Manager"]
+end
+
+%% Connections between Renderer and Main
+DashboardUI <--> IPCChannel
+StatsViewer <--> IPCChannel
+
+%% Internal Main Process flows
+IPCChannel --> UnifiedHandler
+UnifiedHandler --> WindowTracker
+UnifiedHandler --> KeyboardEngine
+UnifiedHandler --> DBManager

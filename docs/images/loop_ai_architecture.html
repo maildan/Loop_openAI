@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Loop AI Real Architecture</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .architecture-container {
+            background: white;
+            border: 2px solid #ccc;
+            border-radius: 8px;
+            padding: 30px;
+            max-width: 1200px;
+            width: 100%;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }        .main-title {
+            text-align: center;
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 25px;
+            color: #333;
+        }
+
+        .layers-container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .layer {
+            border: 2px solid #ccc;
+            border-radius: 6px;
+            padding: 20px;
+            background: #f9f9f9;
+            position: relative;
+        }
+
+        .entry-layer {
+            background: #e8f5e8;
+            border-color: #4caf50;
+        }
+
+        .api-layer {
+            background: #e3f2fd;
+            border-color: #2196f3;
+        }
+
+        .handlers-layer {
+            background: #fff3e0;
+            border-color: #ff9800;
+        }        .services-layer {
+            background: #f3e5f5;
+            border-color: #9c27b0;
+        }
+
+        .layer-title {
+            font-size: 16px;
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 15px;
+            color: #333;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 8px;
+        }
+
+        .components-grid {
+            display: grid;
+            gap: 12px;
+        }
+
+        .grid-2 {
+            grid-template-columns: 1fr 1fr;
+        }
+
+        .grid-3 {
+            grid-template-columns: 1fr 1fr 1fr;
+        }
+
+        .grid-4 {
+            grid-template-columns: 1fr 1fr 1fr 1fr;
+        }        .grid-5 {
+            grid-template-columns: repeat(5, 1fr);
+        }
+
+        .component-box {
+            background: white;
+            border: 1px solid #999;
+            border-radius: 4px;
+            padding: 12px;
+            text-align: center;
+            font-size: 12px;
+            color: #333;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            transition: transform 0.2s ease;
+        }
+
+        .component-box:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 3px 6px rgba(0,0,0,0.15);
+        }
+
+        .main-component {
+            background: #fff3cd !important;
+            border-color: #856404 !important;
+            font-weight: bold;
+        }
+
+        .group-section {
+            margin-bottom: 20px;
+        }
+
+        .group-title {
+            font-size: 14px;
+            font-weight: bold;
+            color: #555;
+            margin-bottom: 10px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 5px;
+        }        .flow-arrow {
+            text-align: center;
+            font-size: 24px;
+            color: #666;
+            margin: 10px 0;
+        }
+
+        .inline-components {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+        }
+
+        .inline-component {
+            background: white;
+            border: 1px solid #999;
+            border-radius: 4px;
+            padding: 10px 15px;
+            text-align: center;
+            font-size: 12px;
+            color: #333;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        @media (max-width: 1000px) {
+            .grid-5 {
+                grid-template-columns: repeat(3, 1fr);
+            }
+            .grid-4 {
+                grid-template-columns: 1fr 1fr;
+            }
+            .grid-3 {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+        @media (max-width: 600px) {
+            .components-grid {
+                grid-template-columns: 1fr !important;
+            }
+            .inline-components {
+                flex-direction: column;
+                align-items: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="architecture-container">
+        <div class="main-title">Loop AI - FastAPI 백엔드 아키텍처</div>
+        <div class="layers-container">            <div class="layer entry-layer">
+                <div class="layer-title">Entry Point</div>
+                <div class="inline-components">
+                    <div class="inline-component main-component">entry/main.py</div>
+                    <div class="inline-component">start-dev.js</div>
+                    <div class="inline-component">run_server.py</div>
+                </div>
+            </div>
+            <div class="flow-arrow">↓</div>
+            <div class="layer api-layer">
+                <div class="layer-title">API Layer (FastAPI Core)</div>
+                <div class="group-section">
+                    <div class="group-title">Server Core</div>
+                    <div class="components-grid grid-3">
+                        <div class="component-box main-component">server.py<br>(Main FastAPI App)</div>
+                        <div class="component-box">schemas.py</div>
+                        <div class="component-box">shared_types.py</div>
+                    </div>
+                </div>
+                <div class="group-section">
+                    <div class="group-title">Routes</div>
+                    <div class="components-grid grid-4">
+                        <div class="component-box">core.py</div>
+                        <div class="component-box">spellcheck.py</div>
+                        <div class="component-box">web_search.py</div>
+                        <div class="component-box">assistant.py</div>
+                        <div class="component-box">location.py</div>
+                        <div class="component-box">name_generator.py</div>
+                        <div class="component-box">db.py<br>(Electron 전용)</div>
+                    </div>
+                </div>
+            </div>
+            <div class="flow-arrow">↓</div>            <div class="layer handlers-layer">
+                <div class="layer-title">Business Logic Handlers</div>
+                <div class="components-grid grid-5">
+                    <div class="component-box">ChatHandler<br>(chat_handler.py)</div>
+                    <div class="component-box">SpellCheckHandler<br>(spellcheck_handler.py)</div>
+                    <div class="component-box">LocationHandler<br>(location_handler.py)</div>
+                    <div class="component-box">WebSearchHandler<br>(web_search_handler.py)</div>
+                    <div class="component-box">AssistantHandler<br>(assistant_handler.py)</div>
+                </div>
+            </div>
+            <div class="flow-arrow">↓</div>
+            <div class="layer services-layer">
+                <div class="layer-title">Services & Utilities</div>
+                <div class="group-section">
+                    <div class="group-title">AI Training</div>
+                    <div class="components-grid grid-5">
+                        <div class="component-box">gigachad_ultimate_ai.py</div>
+                        <div class="component-box">hybrid_korean_ai.py</div>
+                        <div class="component-box">quick_korean_ai.py</div>
+                        <div class="component-box">free_korean_ai.py</div>
+                        <div class="component-box">anti_timeout_korean_ai.py</div>
+                    </div>
+                </div>
+                <div class="group-section">
+                    <div class="group-title">Utils</div>
+                    <div class="components-grid grid-4">
+                        <div class="component-box">spellcheck.py</div>
+                        <div class="component-box">name_generator.py</div>
+                        <div class="component-box">style_analyzer.py</div>
+                        <div class="component-box">prompt_loader.py</div>
+                    </div>
+                </div>
+                <div class="group-section">
+                    <div class="group-title">Shared Resources</div>
+                    <div class="inline-components">
+                        <div class="inline-component">shared/prompts/</div>
+                        <div class="inline-component">utils/hanspell/</div>
+                        <div class="inline-component">utils/name_generator/</div>
+                    </div>
+                </div>
+            </div>
+            <div class="layer">
+                <div class="layer-title">External Dependencies</div>
+                <div class="components-grid grid-4">
+                    <div class="component-box">OpenAI API<br>(GPT-4o, GPT-4o-mini)</div>
+                    <div class="component-box">HTTPX Client<br>(HTTP 통신)</div>
+                    <div class="component-box">CORS Middleware</div>
+                    <div class="component-box">Session Middleware</div>
+                </div>
+            </div>        </div>
+    </div>
+</body>
+</html>

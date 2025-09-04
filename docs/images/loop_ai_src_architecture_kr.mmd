@@ -1,0 +1,37 @@
+graph LR;
+
+%% API Layer
+subgraph "API 레이어 (FastAPI)"
+    direction LR
+    Routes["라우터<br/>(routes)"] --> Handlers["핸들러<br/>(handlers)"] --> Schemas["스키마·타입"]
+end
+
+%% Utils / Services
+subgraph "유틸 · 서비스"
+    direction LR
+    PromptLoader["프롬프트 로더"]
+    NameGen["이름 생성기"]
+    SpellcheckUtil["맞춤법 유틸"]
+    KoreanFilter["한국어 필터"]
+    StyleAnalyzer["스타일 분석기"]
+end
+
+Handlers --> PromptLoader
+Handlers --> NameGen
+Handlers --> SpellcheckUtil
+Handlers --> KoreanFilter
+Handlers --> StyleAnalyzer
+
+PromptLoader --> Prompts["프롬프트<br/>(YAML)"]
+
+%% Inference Model
+Inference["파인튜닝 GPT"]
+Handlers --> Inference
+
+%% Training Pipeline
+subgraph "학습 파이프라인"
+    direction LR
+    TrainingScripts["학습 스크립트"] --> Models["파인튜닝 모델"]
+end
+
+Models -.->|"모델 업데이트"| Inference
